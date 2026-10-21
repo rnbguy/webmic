@@ -5,131 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="Description" content="Turn any device into a wireless microphone">
   <title>Wireless Microphone over the internet</title>
-  <script src="dist/ipfs.min.js" defer></script>
-  <script src="dist/bundle.min.js" defer></script>
-  <script src="https://kit.fontawesome.com/90bede2e6a.js" crossorigin="anonymous" defer></script>
-  <script src="https://ackee.gaiagreen.dev/tracker.js" data-ackee-server="https://ackee.gaiagreen.dev" data-ackee-domain-id="f5df10f4-c039-420e-839f-b79cff3f0924" async></script>
+  <link rel="stylesheet" href="dist/bundle.css">
+  <script type="module" src="dist/bundle.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="apple-touch-icon" sizes="180x180" href="/res/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/res/microphone-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/res/microphone-16x16.png">
-  <link rel="manifest" href="/site.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="res/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="res/microphone-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="res/microphone-16x16.png">
+  <link rel="manifest" href="site.webmanifest">
 </head>
-<body onload="Alpine.start()">
-  <main x-data="webmic.root()" x-init="init" class="container">
+<body>
+  <main x-data="webmic.root()" class="container">
     <template x-if="!showHelp">
-      <div>
-        <div class="segmented-control">
-          <template x-for="m in modes">
+      <div class="controls">
+        <div class="segmented-control" role="radiogroup" aria-label="Device role">
+          <template x-for="m in modes" :key="m">
             <div>
-              <input x-model="mode" type="radio" :value="m" :id="m" x-on:change="tabChanged($event.target.value)" />
-              <label :for="m" :class="`tab-${m}`">
-                <p x-text="m"></p>
-              </label>
+              <input type="radio" name="mode" :value="m" :id="m" :checked="mode === m" @change="setMode(m)" />
+              <label :for="m" :class="`tab-${m}`"><span x-text="m"></span></label>
             </div>
           </template>
-          <div :class="`segmented-control__color selected-${mode}`"></div>
+          <div :class="`segmented-control__color selected-${mode}`" aria-hidden="true"></div>
         </div>
 
-        <template x-if="mode == 'microphone'">
-          <div x-data="webmic.microphone()" class="microphone">
+        <template x-if="mode === 'microphone'">
+          <div class="microphone">
             <div class="circle">
-              <input type="checkbox" x-on:change="applyStreamStatus($event.target.checked)" id="streaming" />
-              <label for="streaming">
-                <i class="material-icons">mic_none</i>
-              </label>
-              <span class="circle__back-1"></span>
-              <span class="circle__back-2"></span>
-            </div>
-            <div class="chip">
-              <div class="chip__icon">
-                <i class="material-icons" x-text="stateIcon"></i>
-              </div>
-              <template x-if="state == STATES.IDLE">
-                <p>Tap above to start streaming</p>
-              </template>
-              <template x-if="state == STATES.CONNECTING">
-                <p>Connecting...</p>
-              </template>
-              <template x-if="state == STATES.LOOKING_FOR_RECEIVERS">
-                <p>Looking for receivers...</p>
-              </template>
-              <template x-if="state == STATES.STREAMING">
-                <p>Streaming to <strong x-text="target"></strong></p>
-              </template>
+              <input type="checkbox" id="streaming" :checked="active" @change="toggle(); $el.checked = active" :aria-label="active ? 'Stop microphone' : 'Start microphone'" />
+              <label for="streaming"><i class="material-icons" aria-hidden="true">mic_none</i></label>
+              <span class="circle__back-1" aria-hidden="true"></span>
+              <span class="circle__back-2" aria-hidden="true"></span>
             </div>
           </div>
         </template>
-        <template x-if="mode == 'speaker'">
-          <div x-data="webmic.speaker()" class="speaker">
+        <template x-if="mode === 'speaker'">
+          <div class="speaker">
             <div class="circle">
-              <input type="checkbox" x-on:change="applyListenStatus($event.target.checked)" id="listening" />
-              <label for="listening">
-                <i class="material-icons">volume_up</i>
-              </label>
-              <span class="circle__back-1"></span>
-              <span class="circle__back-2"></span>
+              <input type="checkbox" id="listening" :checked="active" @change="toggle(); $el.checked = active" :aria-label="active ? 'Stop speaker' : 'Start speaker'" />
+              <label for="listening"><i class="material-icons" aria-hidden="true">volume_up</i></label>
+              <span class="circle__back-1" aria-hidden="true"></span>
+              <span class="circle__back-2" aria-hidden="true"></span>
             </div>
-            <div class="chip">
-              <div class="chip__icon">
-                <i class="material-icons" x-text="stateIcon"></i>
-              </div>
-              <template x-if="state == STATES.IDLE">
-                <p>Tap above to start listening</p>
-              </template>
-              <template x-if="state == STATES.CONNECTING">
-                <p>Connecting...</p>
-              </template>
-              <template x-if="state == STATES.LOOKING_FOR_SENDERS">
-                <p>Looking for senders...</p>
-              </template>
-              <template x-if="state == STATES.LISTENING">
-                <p>Listening from <strong x-text="source"></strong></p>
-              </template>
-            </div>
-            <audio></audio>
           </div>
+        </template>
+        <div class="chip" role="status" aria-live="polite" aria-atomic="true">
+          <div class="chip__icon"><i class="material-icons" x-text="stateIcon" aria-hidden="true"></i></div>
+          <p x-text="status"></p>
+        </div>
+        <p class="error" role="alert" x-show="error" x-text="error" x-cloak></p>
+
+        <template x-if="mode === 'microphone' && !active">
+          <form class="pairing" @submit.prevent="applyPairing()">
+            <label for="invitation">Private speaker link</label>
+            <div class="pairing__entry">
+              <input id="invitation" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" x-model="invitation" placeholder="Paste pairing link" required />
+              <button type="submit">Pair</button>
+            </div>
+          </form>
+        </template>
+        <p class="pairing-note" x-show="mode === 'microphone' && paired" x-cloak>Speaker paired</p>
+        <template x-if="mode === 'speaker' && state === 'waiting' && qrCode">
+          <section class="pairing pairing--qr" aria-label="Pair your microphone">
+            <p>Scan with your phone camera, then start the microphone.</p>
+            <img :src="qrCode" alt="QR code for pairing a microphone with this speaker" width="192" height="192" />
+            <label for="pairing-link">Private pairing link</label>
+            <input id="pairing-link" type="text" :value="pairingLink" readonly @focus="$el.select()" />
+            <button type="button" @click="copyPairing()" x-text="copied ? 'Link copied' : 'Copy link'"></button>
+            <p class="pairing-note">Keep this link private. Anyone with it can connect.</p>
+          </section>
         </template>
       </div>
     </template>
     <template x-if="showHelp">
-      <div class="help">
-        <p><strong>Web Microphone</strong> is a small application that works in a web browser (both mobile and desktop) and allows you to send audio from the microphone to another device.</p>
+      <div class="help" tabindex="0" aria-label="How to use Web Microphone">
+        <p><strong>Web Microphone</strong> sends microphone audio to another device using your web browser.</p>
         <h1>How to use it?</h1>
-        <p>
-          Once you open it on the device you want to use as a microphone, tap the big <strong>microphone</strong> button and the app will start looking for another app that is set to be "a speaker".<br />
-        </p>
-        <p>
-          Next, open the app on another device, select <strong>speaker</strong> and then click/tap the big <strong>speaker button</strong>. The two apps will try to find each other and once they do, the status below the button will confirm it's streaming.
-        </p>
+        <p>On the device that will play the audio, select <strong>speaker</strong> and tap the large speaker button. Keep this page open while it shows a pairing QR code.</p>
+        <p>Scan the QR code with your phone camera and open the link. Or copy the private pairing link, open this app on your microphone device, paste the link and press <strong>Pair</strong>.</p>
+        <p>Tap the large <strong>microphone</strong> button and allow microphone access. The status below the button shows when audio is connected. Tap either large button again to stop, including while connecting.</p>
         <h1>Is it safe?</h1>
-        <p>Transmission from microphone to the speaker is encrypted and goes straight from device to device, without any servers in between, so there's no way to record it or listen in on the conversation.</p>
-        <p>That being said, currently the way the microphone finds the speaker and vice versa is quite simple and in case of many users at once, it could connect to the wrong microphone/speaker. This happens by design to make it simpler and not to require any codes, passwords etc. but might need to change in the future. For now it's recommended to make sure if you're connected to the mic/speaker that you wanted and if not, try connecting again.</p>
+        <p>Audio uses encrypted iroh connections through relay servers. A direct device-to-device connection is not guaranteed. Only share the pairing link or QR code with the microphone you want to connect: the link is a secret that grants access to this speaker.</p>
+        <h1>Sound and delay</h1>
+        <p>Keep the microphone away from the speaker or use headphones to avoid feedback. Network and Bluetooth audio can add delay; this app does not remove it.</p>
       </div>
     </template>
 
     <div class="icon">
-      <a href="https://github.com/suda/wireless-microphone" target="_blank" rel="noopener" title="Source code on GitHub">
-        <div class="icon__github">
-          <i class="fab fa-github"></i>
-        </div>
+      <a href="https://github.com/rnbguy/webmic" target="_blank" rel="noopener" title="Source code on GitHub" aria-label="Source code on GitHub">
+        <div class="icon__github"><i class="fab fa-github" aria-hidden="true"></i></div>
       </a>
-      <a href="https://twitter.com/suda" target="_blank" rel="noopener" title="Twitter">
-        <div class="icon__twitter">
-          <i class="fab fa-twitter"></i>
-        </div>
+      <a href="https://twitter.com/suda" target="_blank" rel="noopener" title="Original creator on Twitter" aria-label="Original creator on Twitter">
+        <div class="icon__twitter"><i class="fab fa-twitter" aria-hidden="true"></i></div>
       </a>
-      <a href="https://www.producthunt.com/@suda" target="_blank" rel="noopener" title="Product Hunt">
-        <div class="icon__ph">
-          <i class="fab fa-product-hunt"></i>
-        </div>
+      <a href="https://www.producthunt.com/@suda" target="_blank" rel="noopener" title="Original creator on Product Hunt" aria-label="Original creator on Product Hunt">
+        <div class="icon__ph"><i class="fab fa-product-hunt" aria-hidden="true"></i></div>
       </a>
-      <a x-on:click="toggleHelp()">
-        <div :class="showHelp ? 'icon__help pressed' : 'icon__help'">
-          <i class="fas fa-question-circle"></i>
-        </div>
-      </a>
+      <button type="button" @click="toggleHelp()" :aria-pressed="showHelp" :aria-label="showHelp ? 'Close help' : 'Open help'">
+        <div :class="showHelp ? 'icon__help pressed' : 'icon__help'"><i class="fas fa-question-circle" aria-hidden="true"></i></div>
+      </button>
     </div>
   </main>
 </body>

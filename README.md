@@ -1,50 +1,99 @@
-<div align="center">
-  <img src="webmic.gif" alt="Screen capture" width="200" />
-  <h3><a href="https://webmic.suda.pl/" target="_blank">Web Microphone</a></h3>
-  <h6>Turn any device into a wireless microphone</h6>
-  <a href="https://webrtc.org/" target="_blank"><img src="https://img.shields.io/badge/-webrtc-important" alt="WebRTC" /></a>
-  <a href="https://ipfs.io/" target="_blank"><img src="https://img.shields.io/badge/-ipfs-informational" alt="IPFS" /></a>
-  <a href="https://github.com/alpinejs/alpine" target="_blank"><img src="https://img.shields.io/badge/-alpinejs-success" alt="Alpine.js" /></a>
-</div>
+# Web Microphone
 
-## 🎙 What is this?
+Send a browser microphone to another browser over encrypted iroh connections.
+This fork preserves [suda's WebMic](https://github.com/suda/wireless-microphone)
+interface and replaces IPFS discovery and WebRTC with browser iroh.
 
-<a href="https://webmic.suda.pl/" target="_blank">Web Microphone</a> is a small web app that allows you to stream your microphone to another browser with very small latency and decent quality.
-It's a great tool when you need a wireless microphone for streaming or just want to monitor another room.
+[Open WebMic](https://ranadeep.in/webmic/)
+([GitHub Pages address](https://rnbguy.github.io/webmic/)). The account's existing
+custom domain may redirect the GitHub address.
 
-## 🔊 How does it work?
+## Use
 
-Once you open it on the device you want to use as a microphone, click/tap the big **microphone button** and the app will start looking for another app that is set to be "a speaker".
+1. On the computer connected to your speaker, select **speaker** and tap the large
+   speaker control. Start with a low output volume.
+2. Scan its QR code with the microphone phone's camera and open the link. Or copy
+   the private pairing link and paste it into WebMic on the microphone device.
+3. Tap the large microphone control and allow microphone access. Audio starts
+   after the status changes to **Streaming to** / **Listening from**.
+4. Tap either large control to stop. Restarting the speaker creates a new pairing
+   link; scan or paste that new link before reconnecting.
 
-Then you can the app on another device/browser/tab, select **speaker** and then click/tap the big **speaker button**. The two apps will try to find each other and once they do, the status below the button will say:
+Keep both pages open. The devices need internet access, not the same network.
+Bluetooth input routing depends on the phone and browser; pairing a Bluetooth
+microphone with the OS does not guarantee the browser will capture it.
 
-> Streaming to **Browser(OS)**
+## Privacy and limits
 
-or
+- The QR/link contains the speaker's endpoint address and a random pairing secret.
+  Anyone with the link can attempt to connect. A speaker accepts one authenticated
+  microphone per session; stopping it invalidates the old endpoint.
+- The secret is in the URL fragment, not an HTTP query. The microphone removes it
+  from the address bar after reading it. Do not publish screenshots of active QR
+  codes or share pairing links with untrusted people.
+- Browser iroh currently sends traffic through relays. Audio is encrypted between
+  endpoints; the relay cannot read it, but can observe connection metadata.
+- This app uses iroh's default public relays. Their provider describes them as
+  [development/testing infrastructure without uptime or performance guarantees](https://docs.iroh.computer/concepts/relays).
+- Audio is mono PCM16 at 24 kHz, in 20 ms QUIC datagrams: about 384 kbit/s before
+  transport overhead. Playback starts with a 40 ms buffer and discards accumulated
+  backlog rather than letting playback delay grow indefinitely.
+- There is no recording, application server, STUN/TURN service, or WebRTC fallback.
+  The static page uses external font/icon stylesheets; executable code is bundled
+  locally.
+- Noise suppression is requested from the browser, but this is **not automatic
+  acoustic feedback suppression**. Keep the microphone close to the mouth and
+  away from speakers. Bluetooth and network delay remain audible risks.
+- HTTPS, WebAssembly, AudioWorklet, and microphone permission are required.
+  Backgrounding, screen locking, calls, and changing audio devices can interrupt
+  a session. A screen wake lock is requested where supported.
 
-> Listening from **Browser(OS)**
+## Build
 
-to confirm that both apps are connected to each other. Of course **Browser** will be the name of the web browser and **OS** the operating system of the microphone/speaker.
+Requires Bun 1.4.3, the Rust toolchain in `rust-toolchain.toml`, and the matching
+Wasm binding generator:
 
-## 👂 Is it safe? Can anyone listen to my microphone? Are you recording anything?
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+bun install --frozen-lockfile --ignore-scripts
+bun run build
+bun run check
+bun run serve
+```
 
-Yes/No/NO!
+The preview is at `http://127.0.0.1:4173/webmic/`. Microphone permissions on another
+device require serving over HTTPS; a phone cannot reach this loopback preview.
 
-Communication between the microphone and speaker is encrypted and goes straight from device to device, without any servers in between, so there's no way to record it or listen in on the conversation.
+`bun run build` compiles the Rust bridge to Wasm and TypeScript to JavaScript/CSS,
+then assembles `_site/`. The frontend uses Alpine.js and the original neumorphic
+CSS. `bun run check` checks TypeScript and runs an assert-based audio self-check
+for PCM clipping/decoding, buffering, packet loss, duplicates, sequence wrap,
+backlog limits, and malformed packets.
 
-That being said, currently the way the microphone finds the speaker and vice versa is quite simple and in case of many users at once, it could connect to the wrong microphone/speaker. This is by design to make it very simple and not to require any codes, passwords etc. but might need to change in the future. For now I recommend making sure if you're connected to the mic/speaker that you wanted and if not, try connecting again.
+`.github/workflows/pages.yaml` builds and deploys `_site/` on pushes to `main`.
+Generated files are not committed. The `upstream` branch preserves the original
+repository and remains the fork's default branch by project choice; development
+and Pages deployment use `main`.
 
-## 👩‍💻 How does it work under the hood?
+## Verification
 
-There are two main parts in play here:
-* [WebRTC](https://webrtc.org/) that takes care of connecting the peers and handling the audio stream
-* [IPFS PubSub](https://blog.ipfs.io/25-pubsub/) that acts as the signaling/discovery server to allow the mic and speaker find each other and negotiate connection
+A local Chromium smoke run used a synthetic microphone and actual public iroh
+relay connections. It rejected an incorrect pairing secret, delivered non-silent
+audio into the receiving Web Audio graph with WebRTC disabled, and propagated
+Stop to the other peer. This does not verify physical Bluetooth devices,
+classroom acoustics, or mobile Safari/Android behavior.
 
-Go ahead and explore [the source](script.js) to see how it works.
+## Credits and license
 
-The UI is done using [Alpine.js](https://github.com/alpinejs/alpine) a lightweight library, great for small prototypes.
+- Original WebMic: [Wojtek Siudzinski](https://github.com/suda), MIT license retained
+  in `LICENSE`.
+- Original neumorphic design and CSS: [Maria Munoz](https://dribbble.com/myacode),
+  [Neumorphic Components](https://codepen.io/myacode/pen/PoqQQNM).
+- Original IPFS signaling proof of concept: [Chad Retz](https://github.com/cretz/webrtc-ipfs-signaling).
+- Browser transport: [iroh](https://github.com/n0-computer/iroh); browser integration
+  follows its [official browser echo example](https://github.com/n0-computer/iroh-examples/tree/main/browser-echo).
 
-## 🙇 Credits
-
-* 🎨 [Maria Muñoz](https://dribbble.com/myacode) for the amazing Neumorphic Components design and code
-* 📚 [Chad Retz](https://github.com/cretz/webrtc-ipfs-signaling) for PoC of using IPFS PubSub as a signaling server
+Control sizing, focus, status feedback, and reduced motion follow
+[Apple's button guidance](https://developer.apple.com/design/human-interface-guidelines/buttons)
+and [Android's accessibility guidance](https://developer.android.com/design/ui/mobile/guides/foundations/accessibility).

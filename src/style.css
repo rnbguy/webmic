@@ -10,7 +10,7 @@
   --greyLight-1: #e4ebf5;
   --greyLight-2: #c8d0e7;
   --greyLight-3: #bec8e4;
-  --greyDark: #9baacf;
+  --greyDark: #53617f;
 
   --width: 24.5rem;
   --circle-size: 15rem;
@@ -111,7 +111,11 @@ a {
   margin: 10rem 0;
 }
 .circle input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
 }
 .circle label {
   grid-row: 1 / 2;
@@ -175,23 +179,31 @@ a {
   grid-column: 1;
   grid-row: 1;
   width: var(--width);
-  height: 4rem;
+  height: max(4rem, 48px);
   box-shadow: 0.3rem 0.3rem 0.6rem var(--greyLight-2), -0.2rem -0.2rem 0.5rem var(--white);
   border-radius: 1rem;
   display: flex;
   align-items: center;
   position: relative;
 }
+.segmented-control > div:not(.segmented-control__color) {
+  flex: 1;
+  min-width: 0;
+}
 .segmented-control input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
 }
 .segmented-control div > input:checked + label {
   transition: all 0.5s ease;
   color: var(--primary);
 }
 .tab-microphone, .tab-speaker {
-  width: 12rem;
-  height: 3.6rem;
+  width: 100%;
+  height: max(3.6rem, 48px);
   font-size: 1.4rem;
   display: flex;
   justify-content: center;
@@ -205,8 +217,8 @@ a {
 }
 .segmented-control__color {
   position: absolute;
-  height: 3.4rem;
-  width: 12rem;
+  height: calc(100% - .6rem);
+  width: calc(50% - .6rem);
   margin-left: 0.3rem;
   border-radius: 0.8rem;
   box-shadow: inset 0.2rem 0.2rem 0.5rem var(--greyLight-2), inset -0.2rem -0.2rem 0.5rem var(--white);
@@ -217,7 +229,7 @@ a {
   transition: transform 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
 }
 .segmented-control__color.selected-speaker {
-  transform: translateX(12rem);
+  transform: translateX(calc(100% + .6rem));
   transition: transform 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
 }
 /*  ICONS  */
@@ -226,7 +238,7 @@ a {
   justify-content: space-between;
   margin-top: 3rem;
   width: var(--width);
-  padding: 0 2rem;
+  padding: 0;
 }
 .icon__github {
   grid-column: 1 / 4;
@@ -241,8 +253,8 @@ a {
   grid-column: 4 / 4;
 }
 .icon div {
-  width: 4rem;
-  height: 4rem;
+  width: max(4rem, 48px);
+  height: max(4rem, 48px);
   border-radius: 50%;
   box-shadow: 0.3rem 0.3rem 0.6rem var(--greyLight-2), -0.2rem -0.2rem 0.5rem var(--white);
   display: flex;
@@ -272,4 +284,153 @@ a {
     transform: scale(2);
     opacity: 0;
   }
+}
+
+[x-cloak] {
+  display: none !important;
+}
+
+.container {
+  padding: 3rem 1.6rem;
+  overflow: hidden;
+}
+
+.controls {
+  width: var(--width);
+  max-width: 100%;
+}
+
+.help, .segmented-control, .chip, .icon {
+  max-width: 100%;
+}
+
+.chip {
+  min-height: 4rem;
+  height: auto;
+  padding: .6rem .4rem;
+}
+
+.chip p {
+  flex: 1;
+  padding-right: .5rem;
+  overflow-wrap: anywhere;
+}
+
+.chip__icon {
+  flex-shrink: 0;
+}
+
+button, input {
+  font: inherit;
+}
+
+button, a, label {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.icon button {
+  border: 0;
+  background: transparent;
+  border-radius: 50%;
+}
+
+:focus-visible,
+.circle input:focus-visible + label,
+.segmented-control input:focus-visible + label {
+  outline: 3px solid var(--primary-dark);
+  outline-offset: 4px;
+}
+
+.pairing {
+  margin-top: 2rem;
+  padding: 1.2rem;
+  border-radius: 1rem;
+  box-shadow: inset .2rem .2rem .5rem var(--greyLight-2), inset -.2rem -.2rem .5rem var(--white);
+  color: var(--greyDark);
+  font-size: 1.2rem;
+}
+
+.pairing label {
+  display: block;
+  margin-bottom: .6rem;
+}
+
+.pairing__entry {
+  display: flex;
+  gap: .8rem;
+}
+
+.pairing input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: .8rem;
+  border: 1px solid var(--greyDark);
+  border-radius: .6rem;
+  background: var(--greyLight-1);
+  color: var(--greyDark);
+}
+
+.pairing input::placeholder {
+  color: var(--greyDark);
+  opacity: 1;
+}
+
+.pairing button {
+  min-width: 48px;
+  min-height: 48px;
+  padding: .8rem 1.2rem;
+  border: 0;
+  border-radius: .8rem;
+  background: var(--greyLight-1);
+  box-shadow: .2rem .2rem .5rem var(--greyLight-2), -.2rem -.2rem .5rem var(--white);
+  color: var(--primary-dark);
+  cursor: pointer;
+}
+
+.pairing button:active {
+  box-shadow: inset .2rem .2rem .5rem var(--greyLight-2), inset -.2rem -.2rem .5rem var(--white);
+}
+
+.pairing--qr {
+  text-align: center;
+}
+
+.pairing--qr img {
+  display: block;
+  width: 256px;
+  max-width: 100%;
+  height: auto;
+  margin: 1.2rem auto;
+  image-rendering: pixelated;
+  border: 8px solid var(--white);
+  border-radius: .6rem;
+}
+
+.pairing--qr button {
+  margin-top: 1rem;
+}
+
+.pairing-note, .error {
+  margin-top: 1.2rem;
+  font-size: 1.2rem;
+  color: var(--greyDark);
+  overflow-wrap: anywhere;
+}
+
+.error {
+  color: #972a3a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.segmented-control div > input:checked + label,
+.tab-microphone:hover, .tab-speaker:hover,
+.help h1 {
+  color: var(--primary-dark);
 }

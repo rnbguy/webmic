@@ -1,2 +1,9 @@
 node_modules
-dist/bundle.min.js
+dist/
+_site/
+transport/target/
+.omp/
+.omo/
+.antigravitycli/
+.playwright-mcp/
+*.bak
