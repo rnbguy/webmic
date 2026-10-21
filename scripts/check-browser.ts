@@ -72,7 +72,7 @@ export async function checkBrowser(browser: Browser, url: string) {
     await page.locator('#invitation').fill(`${url}#speaker=${address}&key=${'a'.repeat(64)}`)
     await page.getByRole('button', { name: 'Pair', exact: true }).click()
     assert.equal(await page.locator('#invitation').inputValue(), '')
-    await context.clearPermissions()
+    await context.grantPermissions([], { origin: new URL(url).origin })
     await page.locator('#session-toggle').click()
     await page.waitForFunction(() => document.querySelector('#session-error')?.textContent?.includes('site settings'))
     assert.equal(await page.locator('#session-toggle').getAttribute('aria-label'), 'Retry microphone')

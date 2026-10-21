@@ -90,6 +90,12 @@ Set `WEBMIC_TEST_URL` to check an already running preview or deployed site.
 Generated files are not committed. The `upstream` branch preserves the original
 repository. The default branch, development, and Pages deployment use `main`.
 
+CI uses `setup-bun`'s built-in executable cache and `rust-cache` for Cargo
+dependencies, build outputs, and installed tools, including `wasm-bindgen`.
+Bun package downloads are cached separately by Bun version and lockfile.
+Browser binaries are installed fresh, following
+[Playwright's caching guidance](https://playwright.dev/docs/ci#caching-browsers).
+
 ## Verification
 
 A Chromium smoke run used a synthetic microphone and actual public iroh relay
