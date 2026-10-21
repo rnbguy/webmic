@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { chromium, type Browser } from 'playwright'
+import { checkUpgrade } from './check-upgrade'
+import { checkDeviceDefaults } from './check-device'
 
 export async function checkBrowser(browser: Browser, url: string) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce' })
@@ -12,6 +14,27 @@ export async function checkBrowser(browser: Browser, url: string) {
     await page.waitForFunction(() => document.querySelector('main')?.hasAttribute('x-data') && !!document.querySelector('#session-toggle')?.getAttribute('aria-label'))
     assert.equal(await page.getByRole('link', { name: /Source code/ }).getAttribute('href'), 'https://github.com/rnbguy/webmic')
     assert.equal(await page.locator('a[href*="twitter.com"], a[href*="producthunt.com"]').count(), 0)
+    const artwork = await page.evaluate(async () => {
+      const preview = new URL(document.querySelector<HTMLMetaElement>('meta[property="og:image"]')!.content)
+      const imageURL = new URL(preview.pathname, location.origin)
+      const image = await createImageBitmap(await (await fetch(imageURL)).blob())
+      const manifestURL = new URL(document.querySelector<HTMLLinkElement>('link[rel=manifest]')!.href)
+      const manifest = await (await fetch(manifestURL)).json()
+      const icons: number[] = []
+      for (const icon of manifest.icons) {
+        const bitmap = await createImageBitmap(await (await fetch(new URL(icon.src, manifestURL))).blob())
+        icons.push(bitmap.width)
+        bitmap.close()
+      }
+      const result = { preview: [image.width, image.height], icons, start: new URL(manifest.start_url, manifestURL).pathname, scope: new URL(manifest.scope, manifestURL).pathname }
+      image.close()
+      return result
+    })
+    assert.deepEqual(artwork.preview, [1200, 630])
+    assert.deepEqual(artwork.icons, [192, 512])
+    assert.equal(artwork.start, new URL(url).pathname, 'Installed app must open the application, not its versioned asset directory')
+    assert.equal(artwork.scope, new URL(url).pathname)
+    await page.getByLabel('Microphone', { exact: true }).check()
     await page.locator('#invitation').fill('https://untrusted.example/#speaker=e30&key=bad')
     await page.getByRole('button', { name: 'Pair', exact: true }).click()
     await page.getByRole('alert').waitFor()
@@ -27,6 +50,10 @@ export async function checkBrowser(browser: Browser, url: string) {
     assert.equal(await page.locator('#help-toggle').evaluate(element => document.activeElement === element), true)
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' })
+      await page.getByLabel('Microphone', { exact: true }).check()
+      await page.locator('#invitation').fill('https://untrusted.example/#speaker=e30&key=bad')
+      await page.getByRole('button', { name: 'Pair', exact: true }).click()
+      await page.getByRole('alert').waitFor()
       for (const width of [320, 390, 768, 1280]) {
         await page.setViewportSize({ width, height: 900 })
         await page.evaluate(() => document.fonts.ready)
@@ -55,7 +82,7 @@ export async function checkBrowser(browser: Browser, url: string) {
           })
           return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722
         }
-        const selectors = ['.status-detail', '.field-note', '.feedback-note', '.app-footer', '.role-hint', '.soft-button', '.session-toggle', '.role-option input:checked + label']
+        const selectors = ['.status-detail', '.field-note', '.feedback-note', '.app-footer', '.role-hint', '.soft-button', '.session-toggle', '.role-option input:checked + label', '.error-panel h2', '#session-error']
         return selectors.map(selector => {
           const element = document.querySelector<HTMLElement>(selector)!
           let ancestor: HTMLElement | null = element
@@ -66,6 +93,7 @@ export async function checkBrowser(browser: Browser, url: string) {
         })
       })
       for (const entry of contrast) assert.ok(entry.ratio >= 4.5, `${scheme} ${entry.selector}: contrast ${entry.ratio.toFixed(2)}`)
+      await page.getByLabel('Speaker', { exact: true }).check()
     }
     await page.getByLabel('Microphone', { exact: true }).check()
     const address = btoa(JSON.stringify({ id: 'not-contacted-in-permission-test' })).replace(/=+$/, '')
@@ -110,6 +138,8 @@ if (import.meta.main) {
     // Headless shell reports NotSupportedError for microphone capture; use full Chromium.
     browser = await chromium.launch({ headless: true, channel: 'chromium', args: ['--use-fake-device-for-media-stream'] })
     await checkBrowser(browser, url)
+    await checkDeviceDefaults(browser, url)
+    if (!process.env.WEBMIC_TEST_URL) await checkUpgrade(browser)
   } finally {
     await browser?.close()
     server?.kill()

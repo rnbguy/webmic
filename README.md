@@ -10,6 +10,9 @@ custom domain may redirect the GitHub address.
 
 ## Use
 
+Desktop browsers start as Speaker; Android/iOS devices start as Microphone.
+Opening a speaker's pairing link selects Microphone on either device.
+
 1. On the computer connected to your speaker, select **speaker** and tap the large
    speaker control. Start with a low output volume.
 2. Scan its QR code with the microphone phone's camera and open the link. Or copy
@@ -19,7 +22,7 @@ custom domain may redirect the GitHub address.
 4. Tap either large control to stop. Restarting the speaker creates a new pairing
    link; scan or paste that new link before reconnecting.
 
-Use **Mute microphone** to pause capture without closing the connection. Adjust
+Use **Mute microphone** to silence microphone audio without closing the connection. Adjust
 **Speaker volume** before increasing your device's output volume. Help stays open
 without interrupting audio. The interface follows the device's light/dark theme.
 
@@ -62,6 +65,7 @@ Wasm binding generator:
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.129 --locked
 bun install --frozen-lockfile --ignore-scripts
+bunx playwright install --with-deps --no-shell chromium
 bun run build
 bun run check
 bun run serve
@@ -70,20 +74,26 @@ bun run serve
 The preview is at `http://127.0.0.1:4173/webmic/`. Microphone permissions on another
 device require serving over HTTPS; a phone cannot reach this loopback preview.
 
-`bun run build` compiles the Rust bridge to Wasm and TypeScript to JavaScript/CSS,
-then assembles `_site/`. The frontend uses Alpine.js and neumorphic CSS.
+`bun run build` compiles Rust/Wasm and TypeScript, embeds selected packaged SVG
+icons, generates matching preview/install images, and assembles `_site/`.
+The complete asset set uses one content-hashed URL directory; worklet and Wasm
+loads resolve relative to that same release. This follows standard
+[cache busting](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching).
+An already-cached pre-versioning page may still need one hard reload.
 `bun run check` checks TypeScript and runs assert-based audio and session checks:
 PCM/transfer boundaries, loss, sequence wrap, queue limits, malformed packets,
 cancelled permission grants, role changes, offline errors, and stale callbacks.
 
 ```sh
-bunx playwright install --with-deps --no-shell chromium
 bun run check:browser
 ```
 
 The browser check starts and stops its own preview. It verifies both system
 themes at 320, 390, 768, and 1280 px, touch targets, text contrast, pairing-link
 validation, help focus restoration, permission denial, and offline retry.
+It also checks desktop/phone defaults, pairing precedence, preview/icon images,
+manifest launch paths, and an upgrade with the previous deployment's assets
+still cached in the browser.
 Set `WEBMIC_TEST_URL` to check an already running preview or deployed site.
 The checks use full Chromium's headless mode, not the reduced headless shell,
 so microphone permission behavior is exercised with working capture APIs.
@@ -122,6 +132,9 @@ are retained in `LICENSE`.
 The original CSS design attribution is retained in `src/style.css`.
 Browser transport uses [iroh](https://github.com/n0-computer/iroh), following its
 [official browser echo example](https://github.com/n0-computer/iroh-examples/tree/main/browser-echo).
+UI icons use [Lucide](https://lucide.dev/) and the GitHub mark from
+[Simple Icons](https://simpleicons.org/). Only selected SVGs and their license
+notices are included in the deployed asset set.
 
 Control sizing, focus, status feedback, and reduced motion follow
 [Apple's button guidance](https://developer.apple.com/design/human-interface-guidelines/buttons)

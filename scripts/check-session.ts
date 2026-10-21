@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm'
 const built = await Bun.build({
   entrypoints: [new URL('../src/script.ts', import.meta.url).pathname],
   target: 'browser', format: 'iife',
+  define: { 'import.meta.url': JSON.stringify(new URL('../src/script.ts', import.meta.url).href) },
   plugins: [{ name: 'controller-harness', setup(build) {
     build.onResolve({ filter: /^alpinejs$/ }, () => ({ path: 'alpine', namespace: 'harness' }))
     build.onLoad({ filter: /.*/, namespace: 'harness' }, () => ({ contents: 'export default { start() {} }', loader: 'js' }))
@@ -16,7 +17,7 @@ const code = await built.outputs[0].text()
 
 function harness() {
   const contexts: { closed: boolean }[] = []
-  const { promise: captured, resolve: resolveCapture } = Promise.withResolvers<unknown>()
+  const { promise: captured, resolve: resolveCapture, reject: rejectCapture } = Promise.withResolvers<unknown>()
   const listeners = new Map<string, () => void>()
   const location = new URL('https://example.test/webmic/')
   const window = {
@@ -47,9 +48,10 @@ function harness() {
     TextEncoder, TextDecoder, crypto
   })
   const app = window.webmic.root()
+  app.setMode('microphone')
   const address = btoa(JSON.stringify({ id: 'test-address' })).replace(/=+$/, '')
   const link = `${location.href}#speaker=${address}&key=${'a'.repeat(64)}`
-  return { app, navigator, contexts, resolveCapture, listeners, link }
+  return { app, navigator, contexts, resolveCapture, rejectCapture, listeners, link }
 }
 
 {
@@ -118,11 +120,28 @@ function harness() {
   assert.equal(app.state, 'connected')
   app.stop()
   assert.equal(app.muted, false)
-  app.fail(new DOMException('denied', 'NotAllowedError'), 1)
-  assert.match(app.error, /site settings/)
+}
+{
+  const { app, link, rejectCapture, contexts } = harness()
+  app.invitation = link
+  app.applyPairing()
+  const starting = app.toggle()
+  rejectCapture(new DOMException('denied', 'NotAllowedError'))
+  await starting
   assert.equal(app.state, 'error')
-  app.fail(new Error('stale failure'), 0)
-  assert.match(app.error, /site settings/, 'An obsolete asynchronous failure cannot replace the current error')
+  assert.equal(contexts[0].closed, true, 'Permission denial releases the audio context')
+  assert.equal(app.paired, true, 'Permission denial keeps the still-valid speaker pairing for retry')
+}
+{
+  const { app, link, rejectCapture } = harness()
+  app.invitation = link
+  app.applyPairing()
+  const starting = app.toggle()
+  await app.toggle()
+  rejectCapture(new DOMException('late denial', 'NotAllowedError'))
+  await starting
+  assert.equal(app.state, 'idle')
+  assert.equal(app.error, '', 'A late permission failure must not replace the cancelled session')
 }
 {
   const { app, listeners } = harness()

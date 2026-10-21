@@ -16,7 +16,7 @@ let transportPromise: Promise<Transport> | null = null
 
 async function loadTransport(): Promise<Transport> {
   if (!transportPromise) {
-    const url = new URL('dist/iroh/webmic_transport.js', document.baseURI).href
+    const url = new URL('iroh/webmic_transport.js', import.meta.url).href
     transportPromise = (import(url) as Promise<Transport>).then(async module => {
       await module.default()
       return module
@@ -43,7 +43,7 @@ function root() {
   let meterPackets = 0
 
   return {
-    mode: 'microphone' as Mode,
+    mode: 'speaker' as Mode,
     showHelp: false,
     state: 'idle' as SessionState,
     error: '',
@@ -55,7 +55,7 @@ function root() {
     muted: false,
     volume: 70,
     inputLevel: 0,
-    audioStatus: 'Browser echo cancellation and noise suppression are requested. Keep the microphone behind the speaker.',
+    audioStatus: 'Browser audio processing depends on the device.',
     onPageHide: undefined as (() => void) | undefined,
     onPairingLink: undefined as (() => void) | undefined,
     onOffline: undefined as (() => void) | undefined,
@@ -64,7 +64,7 @@ function root() {
     get active(): boolean { return this.state != 'idle' && this.state != 'error' },
     get busy(): boolean { return ['requesting', 'preparing', 'connecting'].includes(this.state) },
     get status(): string {
-      if (this.error && this.state == 'error') return 'Session stopped'
+      if (this.state == 'error') return ''
       if (this.state == 'requesting') return 'Allow microphone access in your browser'
       if (this.state == 'preparing') return 'Preparing audio and secure connection...'
       if (this.state == 'connecting') return 'Connecting...'
@@ -78,6 +78,7 @@ function root() {
     },
 
     init() {
+      this.setMode(platform.os?.family == 'Android' || platform.os?.family == 'iOS' ? 'microphone' : 'speaker')
       this.onPairingLink = () => {
         if (location.hash) {
           this.invitation = location.href
@@ -148,7 +149,7 @@ function root() {
         this.stop()
         pairing = { address: decoded, token }
         this.paired = true
-        this.mode = 'microphone'
+        this.setMode('microphone')
         this.invitation = ''
         this.error = ''
         history.replaceState(null, '', `${location.pathname}${location.search}`)
@@ -207,7 +208,7 @@ function root() {
             else {
               stream = captured
               const settings = captured.getAudioTracks()[0].getSettings()
-              this.audioStatus = `Browser echo cancellation: ${settings.echoCancellation ? 'on' : 'not confirmed'}. Noise suppression: ${settings.noiseSuppression ? 'on' : 'not confirmed'}. Neither guarantees remote-speaker feedback removal.`
+              this.audioStatus = `Echo cancellation: ${settings.echoCancellation ? 'on' : 'not confirmed'}. Noise suppression: ${settings.noiseSuppression ? 'on' : 'not confirmed'}.`
               captured.getTracks().forEach(track => {
                 track.onended = () => this.fail(new Error('Microphone disconnected. Connect it again, then tap to restart.'), current)
               })
@@ -217,7 +218,7 @@ function root() {
         await Promise.all([resumed, capture])
         if (current != generation) return
         this.state = 'preparing'
-        await context.audioWorklet.addModule(new URL('dist/audio-worklet.js', document.baseURI))
+        await context.audioWorklet.addModule(new URL('audio-worklet.js', import.meta.url))
         if (current != generation) return
         const transport = await loadTransport()
         if (current != generation) return
