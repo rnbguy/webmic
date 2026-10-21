@@ -77,7 +77,7 @@ PCM/transfer boundaries, loss, sequence wrap, queue limits, malformed packets,
 cancelled permission grants, role changes, offline errors, and stale callbacks.
 
 ```sh
-bunx playwright install --with-deps chromium
+bunx playwright install --with-deps --no-shell chromium
 bun run check:browser
 ```
 
@@ -85,6 +85,8 @@ The browser check starts and stops its own preview. It verifies both system
 themes at 320, 390, 768, and 1280 px, touch targets, text contrast, pairing-link
 validation, help focus restoration, permission denial, and offline retry.
 Set `WEBMIC_TEST_URL` to check an already running preview or deployed site.
+The checks use full Chromium's headless mode, not the reduced headless shell,
+so microphone permission behavior is exercised with working capture APIs.
 
 `.github/workflows/pages.yaml` builds and deploys `_site/` on pushes to `main`.
 Generated files are not committed. The `upstream` branch preserves the original

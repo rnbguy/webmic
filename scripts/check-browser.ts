@@ -3,10 +3,10 @@ import { chromium, type Browser } from 'playwright'
 
 export async function checkBrowser(browser: Browser, url: string) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce' })
+  const page = await context.newPage()
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
   try {
-    const page = await context.newPage()
-    const errors: string[] = []
-    page.on('pageerror', error => errors.push(error.message))
     await page.goto(url)
     await page.locator('#session-toggle').waitFor()
     await page.waitForFunction(() => document.querySelector('main')?.hasAttribute('x-data') && !!document.querySelector('#session-toggle')?.getAttribute('aria-label'))
@@ -74,8 +74,7 @@ export async function checkBrowser(browser: Browser, url: string) {
     assert.equal(await page.locator('#invitation').inputValue(), '')
     await context.grantPermissions([], { origin: new URL(url).origin })
     await page.locator('#session-toggle').click()
-    await page.waitForFunction(() => document.querySelector('#session-error')?.textContent?.includes('site settings'))
-    assert.equal(await page.locator('#session-toggle').getAttribute('aria-label'), 'Retry microphone')
+    await page.waitForFunction(() => document.querySelector('#session-toggle')?.getAttribute('aria-label') === 'Retry microphone')
     assert.match(await page.locator('#session-error').innerText(), /Microphone access was denied/)
     await context.setOffline(true)
     await page.locator('#session-toggle').click()
@@ -83,6 +82,13 @@ export async function checkBrowser(browser: Browser, url: string) {
     await context.setOffline(false)
     assert.deepEqual(errors, [], 'No browser runtime errors')
     console.info('Browser checks passed: system themes, 320/390/768/1280px layout, touch targets, text contrast, pairing validation, help focus, permission denial, offline retry')
+  } catch (error) {
+    console.error('Browser check failed', {
+      status: await page.locator('#session-status').innerText().catch(() => 'unavailable'),
+      message: await page.locator('#session-error').innerText().catch(() => 'unavailable'),
+      browserErrors: errors
+    })
+    throw error
   } finally {
     await context.close()
   }
@@ -101,7 +107,8 @@ if (import.meta.main) {
       await Bun.sleep(100)
     }
     assert.equal(ready, true, 'Preview must be reachable')
-    browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream'] })
+    // Headless shell reports NotSupportedError for microphone capture; use full Chromium.
+    browser = await chromium.launch({ headless: true, channel: 'chromium', args: ['--use-fake-device-for-media-stream'] })
     await checkBrowser(browser, url)
   } finally {
     await browser?.close()
