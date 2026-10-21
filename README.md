@@ -42,6 +42,10 @@ microphone with the OS does not guarantee the browser will capture it.
   endpoints; the relay cannot read it, but can observe connection metadata.
 - This app uses iroh's default public relays. Their provider describes them as
   [development/testing infrastructure without uptime or performance guarantees](https://docs.iroh.computer/concepts/relays).
+  Their hostnames omit the trailing DNS dot to avoid Safari/WebKit certificate
+  failures, following [iroh's workaround](https://github.com/n0-computer/iroh/issues/4519).
+  After updating, reload both devices and restart the speaker before scanning a
+  new QR code; an old running speaker still advertises dotted relay URLs.
 - Audio is mono PCM16 at 24 kHz, in 20 ms QUIC datagrams: about 384 kbit/s before
   transport overhead. Playback starts with one 20 ms packet and keeps at most
   60 ms of queued samples, dropping older audio when packets arrive in bursts.
@@ -115,6 +119,11 @@ connections, with WebRTC disabled. It rejected an incorrect pairing secret,
 delivered non-silent audio, verified that mute produces silence, preserved the
 session while help was open, re-paired without reloading, and stopped on network
 loss. Light/dark desktop and mobile screenshots were inspected.
+
+A desktop WebKit run reproduced the 30-second relay timeout and rejected the
+dotted relay hostname's TLS certificate. With the upstream workaround, Firefox
+and WebKit both reached a relay, advertised undotted addresses, authenticated
+each other, and delivered a QUIC datagram. This was not a physical iPhone test.
 
 These checks do not verify physical Bluetooth devices, classroom acoustics, or
 mobile Safari/Android behavior. Native browser echo cancellation and noise

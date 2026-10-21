@@ -158,7 +158,16 @@ pub struct AudioEndpoint {
 impl AudioEndpoint {
     /// Resolves only after the official iroh relay is reachable.
     pub async fn create() -> Result<AudioEndpoint, JsError> {
+        // Safari rejects the trailing-dot relay hostnames: iroh issue #4519.
+        let urls: Vec<String> = iroh::defaults::prod::default_relay_map()
+            .urls::<Vec<_>>()
+            .iter()
+            .map(|url| url.to_string().replace("iroh.link./", "iroh.link/"))
+            .collect();
+        let relays = iroh::RelayMap::try_from_iter(urls.iter().map(|url| url.as_str()))
+            .map_err(|e| transport_error("Could not configure iroh relays", e))?;
         let endpoint = Endpoint::builder(N0)
+            .relay_mode(iroh::RelayMode::Custom(relays))
             .alpns(vec![ALPN.to_vec()])
             .bind()
             .await
