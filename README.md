@@ -112,9 +112,11 @@ was deliberately excluded: a megaphone's playback is correlated with the desired
 voice, which can bias ordinary adaptive echo cancellation and suppress speech.
 See the [feedback-cancellation analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC7545262/).
 
-## License and references
+## Credits and license
 
-MIT license and required upstream copyright notices remain in `LICENSE`.
+This is a fork of [suda/wireless-microphone (WebMic)](https://github.com/suda/wireless-microphone),
+originally created by Wojtek Siudzinski. Its MIT license and copyright notices
+are retained in `LICENSE`.
 The original CSS design attribution is retained in `src/style.css`.
 Browser transport uses [iroh](https://github.com/n0-computer/iroh), following its
 [official browser echo example](https://github.com/n0-computer/iroh-examples/tree/main/browser-echo).
