@@ -7,7 +7,8 @@ export async function checkDeviceDefaults(browser: Browser, url: string) {
     ['Android', devices['Pixel 5'], 'Microphone'],
     ['iPhone', devices['iPhone 13'], 'Microphone']
   ] as const) {
-    const context = await browser.newContext({ ...device, reducedMotion: 'reduce' })
+    // Firefox does not support isMobile emulation; retain mobile UA, viewport, and touch.
+    const context = await browser.newContext({ ...device, ...(browser.browserType().name() === 'firefox' ? { isMobile: false } : {}), reducedMotion: 'reduce' })
     try {
       const page = await context.newPage()
       const errors: string[] = []

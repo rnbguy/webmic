@@ -47,13 +47,13 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install Wasm binding generator
         run: cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
-      - name: Install browser for UI checks
-        run: bunx playwright install --with-deps --no-shell chromium
+      - name: Install Chromium, Firefox, and WebKit for UI checks
+        run: bunx playwright install --with-deps --no-shell chromium firefox webkit
       - name: Compile static site
         run: bun run build
       - name: Check TypeScript, audio, and session lifecycle
         run: bun run check
-      - name: Check responsive UI and error recovery
+      - name: Check production UI, devices, layout, recovery, and upgrades in all three engines
         run: bun run check:browser
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:

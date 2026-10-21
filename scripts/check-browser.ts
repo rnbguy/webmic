@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict'
-import { chromium, type Browser } from 'playwright'
+import { chromium, firefox, webkit, type Browser } from 'playwright'
 import { checkUpgrade } from './check-upgrade'
 import { checkDeviceDefaults } from './check-device'
+import { checkLayout } from './check-layout'
 
 export async function checkBrowser(browser: Browser, url: string) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce' })
-  const page = await context.newPage()
   const errors: string[] = []
-  page.on('pageerror', error => errors.push(error.message))
   try {
+    const page = await context.newPage()
+    page.on('pageerror', error => errors.push(error.message))
     await page.goto(url)
     await page.locator('#session-toggle').waitFor()
     await page.waitForFunction(() => document.querySelector('main')?.hasAttribute('x-data') && !!document.querySelector('#session-toggle')?.getAttribute('aria-label'))
@@ -82,7 +83,7 @@ export async function checkBrowser(browser: Browser, url: string) {
           })
           return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722
         }
-        const selectors = ['.status-detail', '.field-note', '.feedback-note', '.app-footer', '.role-hint', '.soft-button', '.session-toggle', '.role-option input:checked + label', '.error-panel h2', '#session-error']
+        const selectors = ['.status-detail', '.field-note', '.feedback-note', '.role-hint', '.soft-button', '.session-toggle', '.role-option input:checked + label', '.error-panel h2', '#session-error']
         return selectors.map(selector => {
           const element = document.querySelector<HTMLElement>(selector)!
           let ancestor: HTMLElement | null = element
@@ -100,7 +101,8 @@ export async function checkBrowser(browser: Browser, url: string) {
     await page.locator('#invitation').fill(`${url}#speaker=${address}&key=${'a'.repeat(64)}`)
     await page.getByRole('button', { name: 'Pair', exact: true }).click()
     assert.equal(await page.locator('#invitation').inputValue(), '')
-    await context.grantPermissions([], { origin: new URL(url).origin })
+    // Firefox has no Playwright microphone permission mapping; its launch preference denies capture.
+    if (browser.browserType().name() !== 'firefox') await context.grantPermissions([], { origin: new URL(url).origin })
     await page.locator('#session-toggle').click()
     await page.waitForFunction(() => document.querySelector('#session-toggle')?.getAttribute('aria-label') === 'Retry microphone')
     assert.match(await page.locator('#session-error').innerText(), /Microphone access was denied/)
@@ -111,9 +113,10 @@ export async function checkBrowser(browser: Browser, url: string) {
     assert.deepEqual(errors, [], 'No browser runtime errors')
     console.info('Browser checks passed: system themes, 320/390/768/1280px layout, touch targets, text contrast, pairing validation, help focus, permission denial, offline retry')
   } catch (error) {
+    const page = context.pages()[0]
     console.error('Browser check failed', {
-      status: await page.locator('#session-status').innerText().catch(() => 'unavailable'),
-      message: await page.locator('#session-error').innerText().catch(() => 'unavailable'),
+      status: await page?.locator('#session-status').innerText().catch(() => 'unavailable') ?? 'unavailable',
+      message: await page?.locator('#session-error').innerText().catch(() => 'unavailable') ?? 'unavailable',
       browserErrors: errors
     })
     throw error
@@ -125,7 +128,6 @@ export async function checkBrowser(browser: Browser, url: string) {
 if (import.meta.main) {
   const url = process.env.WEBMIC_TEST_URL || 'http://127.0.0.1:4173/webmic/'
   const server = process.env.WEBMIC_TEST_URL ? null : Bun.spawn([process.execPath, 'scripts/serve.ts'], { stdout: 'inherit', stderr: 'inherit' })
-  let browser: Browser | undefined
   try {
     let ready = false
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -135,13 +137,26 @@ if (import.meta.main) {
       await Bun.sleep(100)
     }
     assert.equal(ready, true, 'Preview must be reachable')
-    // Headless shell reports NotSupportedError for microphone capture; use full Chromium.
-    browser = await chromium.launch({ headless: true, channel: 'chromium', args: ['--use-fake-device-for-media-stream'] })
-    await checkBrowser(browser, url)
-    await checkDeviceDefaults(browser, url)
-    if (!process.env.WEBMIC_TEST_URL) await checkUpgrade(browser)
+    for (const browserType of [chromium, firefox, webkit]) {
+      console.info(`Running ${browserType.name()} browser checks`)
+      const browser = await browserType.launch({
+        headless: true,
+        // Headless shell reports NotSupportedError for microphone capture; use full Chromium.
+        ...(browserType === chromium ? { channel: 'chromium', args: ['--use-fake-device-for-media-stream'] } : {}),
+        // Fake devices keep denial independent of host hardware; Firefox denies via a browser preference.
+        ...(browserType === firefox ? { firefoxUserPrefs: { 'media.navigator.streams.fake': true, 'permissions.default.microphone': 2 } } : {})
+      })
+      try {
+        await checkBrowser(browser, url)
+        await checkDeviceDefaults(browser, url)
+        await checkLayout(browser, url)
+        // Cache behavior is engine-specific; each fixture builds both deployments using the native build cache.
+        if (!process.env.WEBMIC_TEST_URL) await checkUpgrade(browser)
+      } finally {
+        await browser.close()
+      }
+    }
   } finally {
-    await browser?.close()
     server?.kill()
     if (server) await server.exited
   }

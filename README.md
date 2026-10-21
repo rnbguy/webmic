@@ -2,7 +2,8 @@
 
 Send a browser microphone to another browser over encrypted iroh connections.
 Pair a microphone and speaker with a private QR code or link. The static frontend
-uses Alpine.js and a responsive neumorphic interface.
+uses Alpine.js. Its viewport-sized interface uses borderless, rounded panels
+with subtle shadows; only panel contents scroll.
 
 [Open WebMic](https://ranadeep.in/webmic/)
 ([GitHub Pages address](https://rnbguy.github.io/webmic/)). The account's existing
@@ -13,22 +14,41 @@ custom domain may redirect the GitHub address.
 Desktop browsers start as Speaker; Android/iOS devices start as Microphone.
 Opening a speaker's pairing link selects Microphone on either device.
 
-1. On the computer connected to your speaker, select **speaker** and tap the large
-   speaker control. Start with a low output volume.
+1. On the computer connected to your speaker, select **Speaker** and press
+   **Start speaker**. Start with a low output volume.
 2. Scan its QR code with the microphone phone's camera and open the link. Or copy
    the private pairing link and paste it into WebMic on the microphone device.
-3. Tap the large microphone control and allow microphone access. Audio starts
+3. Press **Start microphone** and allow microphone access. Audio starts
    after the status changes to **Streaming to** / **Listening from**.
-4. Tap either large control to stop. Restarting the speaker creates a new pairing
-   link; scan or paste that new link before reconnecting.
+4. Press **Stop** on either device to end the session. Restarting the speaker
+   creates a new pairing link; scan or paste that new link before reconnecting.
 
 Use **Mute microphone** to silence microphone audio without closing the connection. Adjust
-**Speaker volume** before increasing your device's output volume. Help stays open
-without interrupting audio. The interface follows the device's light/dark theme.
+**Speaker volume** before increasing your device's output volume. Help does not
+interrupt audio. The interface follows the system's light or dark appearance,
+with light as the fallback when no preference is available.
 
 Keep both pages open. The devices need internet access, not the same network.
 Bluetooth input routing depends on the phone and browser; pairing a Bluetooth
 microphone with the OS does not guarantee the browser will capture it.
+
+### Interface state contract
+
+| Session state | Roles | Persistent action | Context |
+| --- | --- | --- | --- |
+| Idle | Both | Start | Pairing setup |
+| Requesting | Microphone | Cancel | Browser permission prompt |
+| Preparing | Both | Cancel | Audio and relay initialization |
+| Connecting | Microphone | Cancel | Peer authentication |
+| Waiting | Speaker | Stop | Private QR/link sharing |
+| Connected | Both | Stop | Live level or output volume; microphone can mute |
+| Muted | Microphone | Stop and Unmute | Same connection, no microphone audio |
+| Error | Both | Retry | Actionable failure message |
+
+Help and appearance are independent of the session. Pairing validation and
+clipboard errors can appear without entering the fatal Error state. Cancelling
+setup invalidates late callbacks; opening Help or changing appearance must not
+stop audio. This is the UI contract, not a formally model-checked specification.
 
 ## Privacy and limits
 
@@ -51,8 +71,7 @@ microphone with the OS does not guarantee the browser will capture it.
   60 ms of queued samples, dropping older audio when packets arrive in bursts.
   Lower buffering can produce more dropouts on jittery connections.
 - There is no recording, application server, STUN/TURN service, or WebRTC fallback.
-  The static page uses an external font stylesheet; executable code and icons are
-  bundled locally.
+  The UI uses system fonts; executable code and SVG icons are bundled locally.
 - Noise suppression is requested from the browser, but this is **not automatic
   acoustic feedback suppression**. Keep the microphone close to the mouth and
   away from speakers. Bluetooth and network delay remain audible risks.
@@ -69,7 +88,7 @@ Wasm binding generator:
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.129 --locked
 bun install --frozen-lockfile --ignore-scripts
-bunx playwright install --with-deps --no-shell chromium
+bunx playwright install --with-deps --no-shell chromium firefox webkit
 bun run build
 bun run check
 bun run serve
@@ -92,15 +111,23 @@ cancelled permission grants, role changes, offline errors, and stale callbacks.
 bun run check:browser
 ```
 
-The browser check starts and stops its own preview. It verifies both system
+The browser check starts and stops its own preview and runs sequentially in
+Chromium, Firefox, and WebKit, locally and in CI. It verifies both system
 themes at 320, 390, 768, and 1280 px, touch targets, text contrast, pairing-link
 validation, help focus restoration, permission denial, and offline retry.
 It also checks desktop/phone defaults, pairing precedence, preview/icon images,
 manifest launch paths, and an upgrade with the previous deployment's assets
 still cached in the browser.
+Layout checks also cover keyboard role selection and focus contrast, short and
+landscape viewports, always-visible session actions, enlarged text, live
+system-theme changes, and the light fallback.
 Set `WEBMIC_TEST_URL` to check an already running preview or deployed site.
-The checks use full Chromium's headless mode, not the reduced headless shell,
-so microphone permission behavior is exercised with working capture APIs.
+Chromium uses full-browser headless mode, not the reduced headless shell, so
+microphone permission behavior is exercised with working capture APIs.
+Firefox denies capture through its browser preference because Playwright does
+not expose a Firefox microphone permission override.
+Use a supported Linux host or the matching Playwright Ubuntu container for the
+complete suite; native Windows WebKit does not support its capture checks.
 
 `.github/workflows/pages.yaml` builds and deploys `_site/` on pushes to `main`.
 Generated files are not committed. The `upstream` branch preserves the original
@@ -124,6 +151,18 @@ A desktop WebKit run reproduced the 30-second relay timeout and rejected the
 dotted relay hostname's TLS certificate. With the upstream workaround, Firefox
 and WebKit both reached a relay, advertised undotted addresses, authenticated
 each other, and delivered a QUIC datagram. This was not a physical iPhone test.
+The browser regression suite covers all three engines, including Help focus,
+Escape dismissal, system appearance, and cached-deployment upgrades.
+Installed Linux Chrome Stable also passed the UI, device-role, layout, and
+cached-upgrade checks.
+The compatibility target is current Chrome, Edge, Firefox, and Safari, including
+phone browsers. Engine tests and mobile viewport emulation do not establish
+compatibility with every branded browser or physical device.
+
+A mixed-engine audio smoke delivered microphone audio through real iroh relays
+from Chromium to Firefox, Firefox to WebKit, and WebKit to Chromium. Mute,
+unmute, and output gain were verified on each route using synthetic capture
+devices and a virtual Linux audio output, not physical microphones or speakers.
 
 These checks do not verify physical Bluetooth devices, classroom acoustics, or
 mobile Safari/Android behavior. Native browser echo cancellation and noise

@@ -41,6 +41,7 @@ function root() {
   let wakeLock: WakeLockSentinel | null = null
   let output: GainNode | null = null
   let meterPackets = 0
+  let viewport: VisualViewport | null = null
 
   return {
     mode: 'speaker' as Mode,
@@ -60,24 +61,33 @@ function root() {
     onPairingLink: undefined as (() => void) | undefined,
     onOffline: undefined as (() => void) | undefined,
     onVisibility: undefined as (() => void) | undefined,
+    onViewport: undefined as (() => void) | undefined,
 
     get active(): boolean { return this.state != 'idle' && this.state != 'error' },
     get busy(): boolean { return ['requesting', 'preparing', 'connecting'].includes(this.state) },
     get status(): string {
       if (this.state == 'error') return ''
-      if (this.state == 'requesting') return 'Allow microphone access in your browser'
-      if (this.state == 'preparing') return 'Preparing audio and secure connection...'
-      if (this.state == 'connecting') return 'Connecting...'
-      if (this.state == 'waiting') return 'Scan to pair your microphone'
-      if (this.state == 'muted') return 'Microphone muted'
+      if (this.state == 'requesting') return 'Allow access in the browser prompt.'
+      if (this.state == 'preparing') return 'Opening an encrypted relay connection.'
+      if (this.state == 'connecting') return 'Keep the speaker page open.'
+      if (this.state == 'waiting') return ''
+      if (this.state == 'muted') return peerLabel ? `To ${peerLabel}` : ''
       if (this.state == 'connected') {
         return `${this.mode == 'microphone' ? 'Streaming to' : 'Listening from'} ${peerLabel}`
       }
-      if (this.mode == 'microphone' && !this.paired) return 'Start your speaker, then scan its QR code'
-      return this.mode == 'microphone' ? 'Tap above to start streaming' : 'Tap above to start listening'
+      return ''
     },
 
     init() {
+      viewport = window.visualViewport
+      this.onViewport = () => {
+        document.documentElement.style.setProperty('--viewport-height', `${viewport?.height ?? window.innerHeight}px`)
+        document.documentElement.style.setProperty('--viewport-offset', `${viewport?.offsetTop ?? 0}px`)
+      }
+      this.onViewport()
+      window.addEventListener('resize', this.onViewport)
+      viewport?.addEventListener('resize', this.onViewport)
+      viewport?.addEventListener('scroll', this.onViewport)
       this.setMode(platform.os?.family == 'Android' || platform.os?.family == 'iOS' ? 'microphone' : 'speaker')
       this.onPairingLink = () => {
         if (location.hash) {
@@ -100,6 +110,11 @@ function root() {
     },
 
     destroy() {
+      if (this.onViewport) {
+        window.removeEventListener('resize', this.onViewport)
+        viewport?.removeEventListener('resize', this.onViewport)
+        viewport?.removeEventListener('scroll', this.onViewport)
+      }
       if (this.onPageHide) window.removeEventListener('pagehide', this.onPageHide)
       if (this.onPairingLink) window.removeEventListener('hashchange', this.onPairingLink)
       if (this.onOffline) window.removeEventListener('offline', this.onOffline)

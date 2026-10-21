@@ -22,6 +22,7 @@ function harness() {
   const location = new URL('https://example.test/webmic/')
   const window = {
     isSecureContext: true, AudioWorkletNode: class {},
+    innerHeight: 844, visualViewport: null,
     addEventListener(name: string, callback: () => void) { listeners.set(name, callback) },
     removeEventListener(name: string) { listeners.delete(name) }
   } as any
@@ -32,6 +33,7 @@ function harness() {
   }
   const document = {
     baseURI: location.href, visibilityState: 'visible',
+    documentElement: { style: { setProperty() {} } },
     querySelectorAll: () => [], addEventListener() {}, removeEventListener() {}
   }
   class AudioContext {
