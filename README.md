@@ -73,8 +73,7 @@ backlog limits, and malformed packets.
 
 `.github/workflows/pages.yaml` builds and deploys `_site/` on pushes to `main`.
 Generated files are not committed. The `upstream` branch preserves the original
-repository and remains the fork's default branch by project choice; development
-and Pages deployment use `main`.
+repository. The default branch, development, and Pages deployment use `main`.
 
 ## Verification
 
