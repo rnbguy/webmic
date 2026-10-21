@@ -32,8 +32,12 @@ jobs:
           cargo install wasm-bindgen-cli --version 0.2.129 --locked
       - name: Compile static site
         run: bun run build
-      - name: Check TypeScript and audio boundaries
+      - name: Check TypeScript, audio, and session lifecycle
         run: bun run check
+      - name: Install browser for UI checks
+        run: bunx playwright install --with-deps chromium
+      - name: Check responsive UI and error recovery
+        run: bun run check:browser
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site

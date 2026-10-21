@@ -1,8 +1,8 @@
 # Web Microphone
 
 Send a browser microphone to another browser over encrypted iroh connections.
-This fork preserves [suda's WebMic](https://github.com/suda/wireless-microphone)
-interface and replaces IPFS discovery and WebRTC with browser iroh.
+Pair a microphone and speaker with a private QR code or link. The static frontend
+uses Alpine.js and a responsive neumorphic interface.
 
 [Open WebMic](https://ranadeep.in/webmic/)
 ([GitHub Pages address](https://rnbguy.github.io/webmic/)). The account's existing
@@ -18,6 +18,10 @@ custom domain may redirect the GitHub address.
    after the status changes to **Streaming to** / **Listening from**.
 4. Tap either large control to stop. Restarting the speaker creates a new pairing
    link; scan or paste that new link before reconnecting.
+
+Use **Mute microphone** to pause capture without closing the connection. Adjust
+**Speaker volume** before increasing your device's output volume. Help stays open
+without interrupting audio. The interface follows the device's light/dark theme.
 
 Keep both pages open. The devices need internet access, not the same network.
 Bluetooth input routing depends on the phone and browser; pairing a Bluetooth
@@ -36,11 +40,12 @@ microphone with the OS does not guarantee the browser will capture it.
 - This app uses iroh's default public relays. Their provider describes them as
   [development/testing infrastructure without uptime or performance guarantees](https://docs.iroh.computer/concepts/relays).
 - Audio is mono PCM16 at 24 kHz, in 20 ms QUIC datagrams: about 384 kbit/s before
-  transport overhead. Playback starts with a 40 ms buffer and discards accumulated
-  backlog rather than letting playback delay grow indefinitely.
+  transport overhead. Playback starts with one 20 ms packet and keeps at most
+  60 ms of queued samples, dropping older audio when packets arrive in bursts.
+  Lower buffering can produce more dropouts on jittery connections.
 - There is no recording, application server, STUN/TURN service, or WebRTC fallback.
-  The static page uses external font/icon stylesheets; executable code is bundled
-  locally.
+  The static page uses an external font stylesheet; executable code and icons are
+  bundled locally.
 - Noise suppression is requested from the browser, but this is **not automatic
   acoustic feedback suppression**. Keep the microphone close to the mouth and
   away from speakers. Bluetooth and network delay remain audible risks.
@@ -66,10 +71,20 @@ The preview is at `http://127.0.0.1:4173/webmic/`. Microphone permissions on ano
 device require serving over HTTPS; a phone cannot reach this loopback preview.
 
 `bun run build` compiles the Rust bridge to Wasm and TypeScript to JavaScript/CSS,
-then assembles `_site/`. The frontend uses Alpine.js and the original neumorphic
-CSS. `bun run check` checks TypeScript and runs an assert-based audio self-check
-for PCM clipping/decoding, buffering, packet loss, duplicates, sequence wrap,
-backlog limits, and malformed packets.
+then assembles `_site/`. The frontend uses Alpine.js and neumorphic CSS.
+`bun run check` checks TypeScript and runs assert-based audio and session checks:
+PCM/transfer boundaries, loss, sequence wrap, queue limits, malformed packets,
+cancelled permission grants, role changes, offline errors, and stale callbacks.
+
+```sh
+bunx playwright install --with-deps chromium
+bun run check:browser
+```
+
+The browser check starts and stops its own preview. It verifies both system
+themes at 320, 390, 768, and 1280 px, touch targets, text contrast, pairing-link
+validation, help focus restoration, permission denial, and offline retry.
+Set `WEBMIC_TEST_URL` to check an already running preview or deployed site.
 
 `.github/workflows/pages.yaml` builds and deploys `_site/` on pushes to `main`.
 Generated files are not committed. The `upstream` branch preserves the original
@@ -77,21 +92,26 @@ repository. The default branch, development, and Pages deployment use `main`.
 
 ## Verification
 
-A local Chromium smoke run used a synthetic microphone and actual public iroh
-relay connections. It rejected an incorrect pairing secret, delivered non-silent
-audio into the receiving Web Audio graph with WebRTC disabled, and propagated
-Stop to the other peer. This does not verify physical Bluetooth devices,
-classroom acoustics, or mobile Safari/Android behavior.
+A Chromium smoke run used a synthetic microphone and actual public iroh relay
+connections, with WebRTC disabled. It rejected an incorrect pairing secret,
+delivered non-silent audio, verified that mute produces silence, preserved the
+session while help was open, re-paired without reloading, and stopped on network
+loss. Light/dark desktop and mobile screenshots were inspected.
 
-## Credits and license
+These checks do not verify physical Bluetooth devices, classroom acoustics, or
+mobile Safari/Android behavior. Native browser echo cancellation and noise
+suppression are requested and their reported settings are shown. They are not
+a guarantee against remote-speaker feedback. Automatic feedback cancellation
+was deliberately excluded: a megaphone's playback is correlated with the desired
+voice, which can bias ordinary adaptive echo cancellation and suppress speech.
+See the [feedback-cancellation analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC7545262/).
 
-- Original WebMic: [Wojtek Siudzinski](https://github.com/suda), MIT license retained
-  in `LICENSE`.
-- Original neumorphic design and CSS: [Maria Munoz](https://dribbble.com/myacode),
-  [Neumorphic Components](https://codepen.io/myacode/pen/PoqQQNM).
-- Original IPFS signaling proof of concept: [Chad Retz](https://github.com/cretz/webrtc-ipfs-signaling).
-- Browser transport: [iroh](https://github.com/n0-computer/iroh); browser integration
-  follows its [official browser echo example](https://github.com/n0-computer/iroh-examples/tree/main/browser-echo).
+## License and references
+
+MIT license and required upstream copyright notices remain in `LICENSE`.
+The original CSS design attribution is retained in `src/style.css`.
+Browser transport uses [iroh](https://github.com/n0-computer/iroh), following its
+[official browser echo example](https://github.com/n0-computer/iroh-examples/tree/main/browser-echo).
 
 Control sizing, focus, status feedback, and reduced motion follow
 [Apple's button guidance](https://developer.apple.com/design/human-interface-guidelines/buttons)

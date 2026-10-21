@@ -1,6 +1,9 @@
 {
-  "name": "Wireless Microphone",
-  "short_name": "Wireless Mic",
+  "name": "Webmic - Wireless microphone",
+  "short_name": "Webmic",
+  "description": "Connect a microphone and speaker across your devices.",
+  "start_url": "./",
+  "scope": "./",
   "icons": [
     {
       "src": "res/android-chrome-192x192.png",
@@ -13,7 +16,6 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#6d5dfc",
   "background_color": "#e4ebf5",
   "display": "standalone"
 }

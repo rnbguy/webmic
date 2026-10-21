@@ -6,13 +6,13 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "serve": "bun scripts/serve.ts",
-    "check": "tsc --noEmit && bun scripts/check-audio.ts"
+    "check": "tsc --noEmit && bun scripts/check-audio.ts && bun scripts/check-session.ts",
+    "check:browser": "bun scripts/check-browser.ts"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rnbguy/webmic.git"
   },
-  "author": "Wojtek @suda Siudzinski",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/rnbguy/webmic/issues"
@@ -24,8 +24,9 @@
     "@types/platform": "^1.3.6",
     "@types/qrcode": "^1.5.5",
     "alpinejs": "^3.9.6",
-    "qrcode": "^1.5.4",
     "platform": "^1.3.6",
+    "playwright": "1.64.1",
+    "qrcode": "^1.5.4",
     "typescript": "^5.9.3"
   }
 }

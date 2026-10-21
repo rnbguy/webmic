@@ -23,7 +23,7 @@ class MicrophoneProcessor extends AudioWorkletProcessor {
 
   process(inputs: Float32Array[][]): boolean {
     const channels = inputs[0]
-    if (!channels.length) return true
+    if (!channels?.length) return true
     for (let i = 0; i < channels[0].length; i++) {
       let sample = 0
       for (const channel of channels) sample += channel[i] / channels.length
@@ -46,15 +46,13 @@ class SpeakerProcessor extends AudioWorkletProcessor {
   read: number
   length: number
   expected: number | null
-  playing: boolean
 
   constructor() {
     super()
-    this.samples = new Float32Array(PACKET_SAMPLES * 8)
+    this.samples = new Float32Array(PACKET_SAMPLES * 3)
     this.read = 0
     this.length = 0
     this.expected = null
-    this.playing = false
     this.port.onmessage = ({ data }) => this.enqueue(data)
   }
 
@@ -67,11 +65,17 @@ class SpeakerProcessor extends AudioWorkletProcessor {
     const sequence = view.getUint32(0, true)
     const gap = this.expected === null ? 0 : (sequence - this.expected) | 0
     if (gap < 0) return
-    if (gap > 3 || this.length + (gap + 1) * PACKET_SAMPLES > PACKET_SAMPLES * 6) {
+    if (gap > 2) {
       this.read = 0
       this.length = 0
-      this.playing = false
     } else {
+      // Shed oldest 20 ms blocks rather than letting a burst increase latency.
+      const overflow = this.length + (gap + 1) * PACKET_SAMPLES - this.samples.length
+      if (overflow > 0) {
+        const dropped = Math.min(this.length, Math.ceil(overflow / PACKET_SAMPLES) * PACKET_SAMPLES)
+        this.read = (this.read + dropped) % this.samples.length
+        this.length -= dropped
+      }
       for (let i = 0; i < gap * PACKET_SAMPLES; i++) this.append(0)
     }
     for (let i = 0; i < PACKET_SAMPLES; i++) {
@@ -87,13 +91,8 @@ class SpeakerProcessor extends AudioWorkletProcessor {
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const output = outputs[0][0]
-    if (!this.playing && this.length >= PACKET_SAMPLES * 2) this.playing = true
-    if (!this.playing) return true
     for (let i = 0; i < output.length; i++) {
-      if (!this.length) {
-        this.playing = false
-        break
-      }
+      if (!this.length) break
       output[i] = this.samples[this.read]
       this.read = (this.read + 1) % this.samples.length
       this.length--

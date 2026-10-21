@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="Description" content="Turn any device into a wireless microphone">
-  <title>Wireless Microphone over the internet</title>
+  <meta name="description" content="Use your phone as a microphone and another browser as a speaker. Pair privately with a QR code or link.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#e4ebf5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#252936" media="(prefers-color-scheme: dark)">
+  <title>Webmic - Wireless microphone</title>
   <link rel="stylesheet" href="dist/bundle.css">
   <script type="module" src="dist/bundle.js"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="apple-touch-icon" sizes="180x180" href="res/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="res/microphone-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="res/microphone-16x16.png">
@@ -17,94 +18,145 @@
 </head>
 <body>
   <main x-data="webmic.root()" class="container">
-    <template x-if="!showHelp">
-      <div class="controls">
-        <div class="segmented-control" role="radiogroup" aria-label="Device role">
-          <template x-for="m in modes" :key="m">
-            <div>
-              <input type="radio" name="mode" :value="m" :id="m" :checked="mode === m" @change="setMode(m)" />
-              <label :for="m" :class="`tab-${m}`"><span x-text="m"></span></label>
-            </div>
-          </template>
-          <div :class="`segmented-control__color selected-${mode}`" aria-hidden="true"></div>
-        </div>
-
-        <template x-if="mode === 'microphone'">
-          <div class="microphone">
-            <div class="circle">
-              <input type="checkbox" id="streaming" :checked="active" @change="toggle(); $el.checked = active" :aria-label="active ? 'Stop microphone' : 'Start microphone'" />
-              <label for="streaming"><i class="material-icons" aria-hidden="true">mic_none</i></label>
-              <span class="circle__back-1" aria-hidden="true"></span>
-              <span class="circle__back-2" aria-hidden="true"></span>
-            </div>
-          </div>
-        </template>
-        <template x-if="mode === 'speaker'">
-          <div class="speaker">
-            <div class="circle">
-              <input type="checkbox" id="listening" :checked="active" @change="toggle(); $el.checked = active" :aria-label="active ? 'Stop speaker' : 'Start speaker'" />
-              <label for="listening"><i class="material-icons" aria-hidden="true">volume_up</i></label>
-              <span class="circle__back-1" aria-hidden="true"></span>
-              <span class="circle__back-2" aria-hidden="true"></span>
-            </div>
-          </div>
-        </template>
-        <div class="chip" role="status" aria-live="polite" aria-atomic="true">
-          <div class="chip__icon"><i class="material-icons" x-text="stateIcon" aria-hidden="true"></i></div>
-          <p x-text="status"></p>
-        </div>
-        <p class="error" role="alert" x-show="error" x-text="error" x-cloak></p>
-
-        <template x-if="mode === 'microphone' && !active">
-          <form class="pairing" @submit.prevent="applyPairing()">
-            <label for="invitation">Private speaker link</label>
-            <div class="pairing__entry">
-              <input id="invitation" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" x-model="invitation" placeholder="Paste pairing link" required />
-              <button type="submit">Pair</button>
-            </div>
-          </form>
-        </template>
-        <p class="pairing-note" x-show="mode === 'microphone' && paired" x-cloak>Speaker paired</p>
-        <template x-if="mode === 'speaker' && state === 'waiting' && qrCode">
-          <section class="pairing pairing--qr" aria-label="Pair your microphone">
-            <p>Scan with your phone camera, then start the microphone.</p>
-            <img :src="qrCode" alt="QR code for pairing a microphone with this speaker" width="192" height="192" />
-            <label for="pairing-link">Private pairing link</label>
-            <input id="pairing-link" type="text" :value="pairingLink" readonly @focus="$el.select()" />
-            <button type="button" @click="copyPairing()" x-text="copied ? 'Link copied' : 'Copy link'"></button>
-            <p class="pairing-note">Keep this link private. Anyone with it can connect.</p>
-          </section>
-        </template>
+    <header class="app-header">
+      <div>
+        <h1>webmic<span aria-hidden="true">.</span></h1>
+        <p>Your microphone. Another device's speaker.</p>
       </div>
-    </template>
-    <template x-if="showHelp">
-      <div class="help" tabindex="0" aria-label="How to use Web Microphone">
-        <p><strong>Web Microphone</strong> sends microphone audio to another device using your web browser.</p>
-        <h1>How to use it?</h1>
-        <p>On the device that will play the audio, select <strong>speaker</strong> and tap the large speaker button. Keep this page open while it shows a pairing QR code.</p>
-        <p>Scan the QR code with your phone camera and open the link. Or copy the private pairing link, open this app on your microphone device, paste the link and press <strong>Pair</strong>.</p>
-        <p>Tap the large <strong>microphone</strong> button and allow microphone access. The status below the button shows when audio is connected. Tap either large button again to stop, including while connecting.</p>
-        <h1>Is it safe?</h1>
-        <p>Audio uses encrypted iroh connections through relay servers. A direct device-to-device connection is not guaranteed. Only share the pairing link or QR code with the microphone you want to connect: the link is a secret that grants access to this speaker.</p>
-        <h1>Sound and delay</h1>
-        <p>Keep the microphone away from the speaker or use headphones to avoid feedback. Network and Bluetooth audio can add delay; this app does not remove it.</p>
-      </div>
-    </template>
-
-    <div class="icon">
-      <a href="https://github.com/rnbguy/webmic" target="_blank" rel="noopener" title="Source code on GitHub" aria-label="Source code on GitHub">
-        <div class="icon__github"><i class="fab fa-github" aria-hidden="true"></i></div>
-      </a>
-      <a href="https://twitter.com/suda" target="_blank" rel="noopener" title="Original creator on Twitter" aria-label="Original creator on Twitter">
-        <div class="icon__twitter"><i class="fab fa-twitter" aria-hidden="true"></i></div>
-      </a>
-      <a href="https://www.producthunt.com/@suda" target="_blank" rel="noopener" title="Original creator on Product Hunt" aria-label="Original creator on Product Hunt">
-        <div class="icon__ph"><i class="fab fa-product-hunt" aria-hidden="true"></i></div>
-      </a>
-      <button type="button" @click="toggleHelp()" :aria-pressed="showHelp" :aria-label="showHelp ? 'Close help' : 'Open help'">
-        <div :class="showHelp ? 'icon__help pressed' : 'icon__help'"><i class="fas fa-question-circle" aria-hidden="true"></i></div>
+      <button id="help-toggle" class="soft-button help-toggle" type="button" x-ref="helpToggle" @click="toggleHelp(); if (showHelp) $nextTick(() => $refs.helpPanel.focus())" :aria-expanded="showHelp" aria-controls="help-panel">
+        <span class="help-symbol" aria-hidden="true">?</span><span>Help</span>
       </button>
-    </div>
+    </header>
+
+    <section class="workspace" aria-label="Wireless audio">
+      <div class="session">
+        <fieldset class="role-picker">
+          <legend class="eyebrow">This device is the</legend>
+          <div class="segmented-control">
+            <div class="role-option">
+              <input id="microphone" type="radio" name="mode" value="microphone" :checked="mode === 'microphone'" @change="setMode('microphone')">
+              <label for="microphone">Microphone</label>
+            </div>
+            <div class="role-option">
+              <input id="speaker" type="radio" name="mode" value="speaker" :checked="mode === 'speaker'" @change="setMode('speaker')">
+              <label for="speaker">Speaker</label>
+            </div>
+          </div>
+        </fieldset>
+        <p class="role-hint" x-text="mode === 'microphone' ? 'Send sound from this device.' : 'Play sound on this device.'">Send sound from this device.</p>
+
+        <div class="circle" :class="{ 'is-active': active, 'is-busy': busy, 'is-muted': muted }">
+          <button id="session-toggle" class="session-toggle" type="button" @click="toggle()" :aria-label="busy ? 'Cancel setup' : active ? 'Stop ' + mode : state === 'error' ? 'Retry ' + mode : 'Start ' + mode" aria-describedby="session-status">
+            <svg x-show="mode === 'microphone'" class="device-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="23" y="7" width="18" height="32" rx="9"></rect>
+              <path d="M16 29v3a16 16 0 0 0 32 0v-3M32 48v9M23 57h18"></path>
+              <path x-show="muted" d="M10 10l44 44" class="mute-slash"></path>
+            </svg>
+            <svg x-show="mode === 'speaker'" x-cloak class="device-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 24h11L34 12v40L20 40H9zM43 23a14 14 0 0 1 0 18M49 15a25 25 0 0 1 0 34"></path>
+            </svg>
+            <span x-text="busy ? 'Cancel setup' : active ? 'Stop ' + mode : state === 'error' ? 'Try again' : 'Start ' + mode">Start microphone</span>
+          </button>
+        </div>
+
+        <div id="session-status" class="session-status" role="status" aria-live="polite" aria-atomic="true" :class="{ 'status-live': state === 'connected', 'status-muted': state === 'muted', 'status-error': state === 'error' }">
+          <p class="status-heading"><span class="status-dot" :class="{ 'status-dot--busy': busy }" aria-hidden="true"></span><strong x-text="state === 'requesting' ? 'Permission needed' : state === 'preparing' ? 'Preparing audio' : state === 'connecting' ? 'Connecting' : state === 'waiting' ? 'Waiting for microphone' : state === 'connected' ? 'Live audio' : state === 'muted' ? 'Microphone muted' : state === 'error' ? 'Connection stopped' : 'Ready when you are'">Ready when you are</strong></p>
+          <p class="status-detail" x-text="status"></p>
+        </div>
+        <section class="audio-controls" x-show="mode === 'microphone' && (state === 'connected' || state === 'muted')" x-cloak aria-label="Microphone controls">
+          <button id="mute-toggle" class="soft-button mute-button" type="button" @click="toggleMute()" :aria-pressed="muted" x-text="muted ? 'Unmute microphone' : 'Mute microphone'"></button>
+          <div class="input-level">
+            <label for="input-level">Microphone level</label>
+            <meter id="input-level" min="0" max="1" low="0.05" high="0.85" optimum="0.5" :value="inputLevel" :aria-valuetext="muted ? 'Muted' : inputLevel < 0.02 ? 'Quiet' : inputLevel > 0.85 ? 'High input level' : 'Receiving audio'">Microphone input level</meter>
+            <p class="field-note" x-text="muted ? 'No microphone audio is being sent.' : 'Speak normally. Lower the speaker volume if you hear a squeal.'"></p>
+          </div>
+        </section>
+        <p class="session-note" x-show="active" x-cloak>Keep both pages open. You can stop at any time.</p>
+      </div>
+
+      <div class="device-panel">
+        <section class="error-panel" x-show="error" x-cloak role="alert" aria-atomic="true">
+          <h2>Connection needs attention</h2>
+          <p id="session-error" x-text="error"></p>
+          <p x-show="state === 'error'">Check the speaker is still open, then try again. If it restarted, use its new pairing link.</p>
+        </section>
+
+        <section class="setup" x-show="mode === 'microphone' && !active" aria-labelledby="microphone-setup-heading">
+          <p class="eyebrow">Connect your devices</p>
+          <h2 id="microphone-setup-heading" x-text="paired ? 'Your speaker is paired' : 'Start with the speaker'">Start with the speaker</h2>
+          <ol class="setup-steps" x-show="!paired">
+            <li>Open Webmic on the device that will play the sound.</li>
+            <li>Choose <strong>Speaker</strong>, then <strong>Start speaker</strong>.</li>
+            <li>Scan its QR code with this device, or paste its link below.</li>
+          </ol>
+          <p class="paired-note" x-show="paired" x-cloak><span aria-hidden="true">&#10003;</span> Press <strong>Start microphone</strong> and allow microphone access in your browser.</p>
+          <form class="pairing" @submit.prevent="applyPairing()">
+            <label for="invitation" x-text="paired ? 'Pair a different speaker' : 'Have a speaker link?'">Have a speaker link?</label>
+            <div class="pairing-entry">
+              <input id="invitation" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" x-model="invitation" placeholder="Paste private pairing link" :aria-invalid="Boolean(error && !paired)" :aria-describedby="error && !paired ? 'session-error pairing-privacy' : 'pairing-privacy'" required>
+              <button class="soft-button" type="submit">Pair</button>
+            </div>
+            <p id="pairing-privacy" class="field-note">Only use a link from the speaker you trust.</p>
+          </form>
+        </section>
+
+        <section class="setup" x-show="mode === 'speaker' && !active" x-cloak aria-labelledby="speaker-setup-heading">
+          <p class="eyebrow">First, the speaker</p>
+          <h2 id="speaker-setup-heading">Create a pairing code</h2>
+          <p>Press <strong>Start speaker</strong> to create a private pairing code.</p>
+          <ol class="setup-steps">
+            <li>Leave this page open with the volume low.</li>
+            <li>On your microphone device, scan the QR code or open the pairing link.</li>
+            <li>Press <strong>Start microphone</strong> on that device.</li>
+          </ol>
+        </section>
+
+        <section class="setup setup-progress" x-show="busy" x-cloak aria-labelledby="progress-heading" :aria-busy="busy">
+          <p class="eyebrow">Setting things up</p>
+          <h2 id="progress-heading" x-text="state === 'requesting' ? 'Allow your microphone' : state === 'preparing' ? 'Preparing your audio' : 'Connecting your devices'"></h2>
+          <p x-show="state === 'requesting'">Choose <strong>Allow</strong> in your browser's permission prompt. If it is hidden, check the microphone or site settings beside the address bar.</p>
+          <p x-show="state === 'preparing'">The audio engine and encrypted connection are starting. You can cancel with the large button.</p>
+          <p x-show="state === 'connecting'">Keep both devices online and the speaker page open. You can cancel and pair again if the connection does not finish.</p>
+        </section>
+
+        <section class="pairing-qr" x-show="mode === 'speaker' && state === 'waiting'" x-cloak aria-labelledby="qr-heading">
+          <p class="eyebrow">Now, the microphone</p>
+          <h2 id="qr-heading">Pair your microphone</h2>
+          <p>Scan with your other device's camera, open the link, then press <strong>Start microphone</strong>.</p>
+          <img x-show="qrCode" :src="qrCode || undefined" alt="Private pairing QR code for this speaker" width="256" height="256">
+          <label for="pairing-link">Or share the private pairing link</label>
+          <input id="pairing-link" type="text" :value="pairingLink" readonly @focus="$el.select()" aria-describedby="link-privacy">
+          <button id="copy-pairing" class="soft-button copy-button" type="button" @click="copyPairing()" x-text="copied ? 'Link copied' : 'Copy pairing link'"></button>
+          <p class="field-note" role="status" aria-live="polite" x-text="copied ? 'Pairing link copied to clipboard.' : ''"></p>
+          <p id="link-privacy" class="field-note">Keep this private. Anyone with the link can connect to your speaker.</p>
+        </section>
+
+        <section class="audio-options" x-show="mode === 'microphone'" aria-labelledby="audio-options-heading">
+          <h2 id="audio-options-heading" class="small-heading">Sound care</h2>
+          <p id="audio-status" class="field-note" x-text="audioStatus"></p>
+        </section>
+
+        <section class="volume-control" x-show="mode === 'speaker'" x-cloak aria-labelledby="volume-heading">
+          <div class="volume-heading"><h2 id="volume-heading" class="small-heading">Speaker volume</h2><output for="volume" x-text="volume + '%'">70%</output></div>
+          <label class="sr-only" for="volume">Speaker output volume</label>
+          <input id="volume" type="range" min="0" max="100" step="1" x-model.number="volume" @input="setVolume()" :aria-valuetext="volume === 0 ? 'Muted' : volume + ' percent'" aria-describedby="volume-note">
+          <p id="volume-note" class="field-note">Start low, then increase gently. Your device's volume also affects the sound.</p>
+        </section>
+
+        <aside class="feedback-note" aria-label="Avoid audio feedback"><strong>Keep some distance.</strong> A microphone near its speaker can cause echo or a loud squeal. Move them apart, turn the speaker down, or use headphones. Processing cannot guarantee feedback prevention.</aside>
+      </div>
+    </section>
+
+    <section id="help-panel" class="help" x-ref="helpPanel" x-show="showHelp" x-cloak tabindex="-1" aria-labelledby="help-heading" @keydown.escape.stop="toggleHelp(); $refs.helpToggle.focus()">
+      <div class="help-heading"><div><p class="eyebrow">Help</p><h2 id="help-heading">Two devices, one microphone</h2></div><button class="soft-button" type="button" @click="toggleHelp(); $refs.helpToggle.focus()">Close help</button></div>
+      <div class="help-grid">
+        <div><h3>Connect speaker first</h3><p>On the playback device, choose <strong>Speaker</strong> and press <strong>Start speaker</strong>. Scan its QR code with your microphone device. Or copy the link, paste it into Webmic on that device, and press <strong>Pair</strong>. Then press <strong>Start microphone</strong> and allow access.</p><h3>Stay in control</h3><p>Mute pauses microphone audio without ending the connection. Stop ends the session; the large button also cancels setup. Switching roles stops the current session. Opening this help does not interrupt audio.</p></div>
+        <div><h3>Echo, squealing, or delay?</h3><p>Keep the microphone away from the speaker, turn playback down, or use headphones. Browser audio processing is device-dependent and does not prevent speaker feedback. Bluetooth and network routing can add delay; use wired audio when possible.</p><h3>Private pairing</h3><p>Audio travels over encrypted iroh connections through relay servers. The QR code and pairing link grant access to this speaker; share them only with your microphone device. Stop and restart the speaker to replace the link.</p></div>
+      </div>
+    </section>
+
+    <footer class="app-footer"><span>Sound between your devices.</span><a href="https://github.com/rnbguy/webmic" target="_blank" rel="noopener noreferrer">Source code <span class="sr-only">(opens in a new tab)</span><span aria-hidden="true">&#8599;</span></a></footer>
+    <noscript><p class="error-panel">Webmic needs JavaScript to connect your devices. Enable it in your browser settings, then reload this page.</p></noscript>
   </main>
 </body>
 </html>
