@@ -99,7 +99,7 @@ export async function checkRecovery(browser: Browser, url: string) {
     await page.goto(url)
     await page.getByRole('button', { name: 'Start speaker', exact: true }).waitFor()
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
-    for (const family of ['', 'monospace']) {
+    for (const family of ['', 'monospace', 'DejaVu Sans', 'serif']) {
       await page.evaluate(family => { document.documentElement.style.fontFamily = family }, family)
       await page.getByRole('radio', { name: 'Speaker', exact: true }).click({ trial: true })
       const roles = await page.locator('.role-option label').evaluateAll(labels => labels.map(label => {

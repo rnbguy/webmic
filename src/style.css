@@ -215,7 +215,7 @@ noscript { position: absolute; inset: 1rem; z-index: 2; overflow: auto; backgrou
 }
 @container app (max-width: 16rem) {
   .segmented-control { flex-direction: column; }
-  .role-option label { justify-content: flex-start; padding-inline: 1rem; }
+  .role-option label { justify-content: flex-start; padding-inline: 1rem .5rem; }
   .container[data-state="error"] .feedback-note { display: none; }
   .error-panel { padding: .5rem; }
   .workspace { display: block; overflow-y: auto; overscroll-behavior: contain; border-radius: 1.125rem; background: var(--surface); }
