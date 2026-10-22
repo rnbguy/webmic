@@ -170,9 +170,6 @@ readable Speaker errors, persistent actions, edge taps, system appearance, and
 the light fallback. CSP checks verify a usable app while blocking third-party
 scripts and unsafe JavaScript evaluation.
 
-The initial enlarged-error visibility assertion is temporarily paused for this
-deployment. It passes locally and will be restored after live verification.
-
 Set `WEBMIC_TEST_URL` to check an already running preview or deployed site.
 Chromium uses full-browser headless mode, not the reduced headless shell, so
 microphone permission behavior is exercised with working capture APIs.

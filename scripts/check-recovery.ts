@@ -130,8 +130,7 @@ export async function checkRecovery(browser: Browser, url: string) {
       const slot = scroller.getBoundingClientRect()
       return { width: bounds.width, visible: Math.min(bounds.bottom, slot.bottom) - Math.max(bounds.top, slot.top), height: bounds.height, scroll: scrollY }
     })
-    // Temporarily paused for the deployment; restore after live verification.
-    // assert.ok(readability.width >= 160 && readability.visible >= readability.height - 1, `Enlarged speaker error must be fully readable before scrolling: ${JSON.stringify(readability)}`)
+    assert.ok(readability.width >= 160 && readability.visible >= readability.height - 1, `Enlarged speaker error must be fully readable before scrolling: ${JSON.stringify(readability)}`)
     assert.equal(readability.scroll, 0)
     await page.locator('#volume').scrollIntoViewIfNeeded()
     const action = await page.locator('#session-toggle').boundingBox()
