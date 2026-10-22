@@ -75,10 +75,13 @@ Help and system appearance changes do not stop streaming. While waiting for a
 microphone, QR expansion uses the existing workspace, not a modal or overlay;
 header/session actions stay visible. The expanded view reserves space for the
 code, keeping its heading available to screen readers. It collapses on connection
-or stop. Pairing validation and clipboard errors can
-appear without entering the fatal Error state. Cancelling setup invalidates late
-callbacks; old operations cannot release a newer session's resources. Enlarged
-text reflows into a bounded scroll island instead of narrow clipped columns.
+or stop. Pairing validation and clipboard errors can appear without entering the
+fatal Error state. Copy feedback follows the latest result and clears on
+connection; late clipboard results cannot bring it back after the pairing link
+disappears. Cancelling setup
+invalidates late callbacks; old operations cannot release a newer session's
+resources. Enlarged text reflows into a bounded scroll island instead of narrow
+clipped columns.
 This is the UI contract, not a formally model-checked specification.
 
 ## Privacy and limits

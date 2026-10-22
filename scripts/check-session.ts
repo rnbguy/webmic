@@ -481,4 +481,45 @@ for (const failure of ['moduleError', 'transportError'] as const) {
   await copying
   assert.equal(h.app.copied, false, 'A stale copy completion must not alter a later session')
 }
+for (const deniedBeforeConnection of [true, false]) {
+  const h = harness()
+  h.app.setMode('speaker')
+  const starting = h.app.primaryAction()
+  await until(() => h.app.state == 'waiting')
+  const pending = Promise.withResolvers<void>()
+  h.navigator.clipboard.writeText = () => pending.promise
+  const copying = h.app.copyPairing()
+  if (deniedBeforeConnection) {
+    pending.reject(new Error('Clipboard denied'))
+    await copying
+    assert.notEqual(h.app.error, '', 'Clipboard denial must offer guidance while the link is displayed')
+  }
+  h.peer.resolve(h.connection)
+  await until(() => h.incoming.length == 1)
+  if (!deniedBeforeConnection) {
+    pending.reject(new Error('Clipboard denied'))
+    await copying
+  }
+  assert.equal(h.app.state, 'connected', 'Clipboard results must not interrupt established audio')
+  assert.equal(h.app.error, '', 'Pairing-only copy guidance must not remain after the link disappears')
+  h.app.endSession()
+  h.incoming[0].reject(new Error('Closed'))
+  await starting
+}
+{
+  const h = harness()
+  h.app.setMode('speaker')
+  const starting = h.app.primaryAction()
+  await until(() => h.app.state == 'waiting')
+  await h.app.copyPairing()
+  h.navigator.clipboard.writeText = async () => {}
+  await h.app.copyPairing()
+  assert.equal(h.app.error, '', 'A successful clipboard retry must clear obsolete fallback guidance')
+  h.navigator.clipboard.writeText = async () => { throw new Error('Clipboard denied') }
+  await h.app.copyPairing()
+  assert.equal(h.app.copied, false, 'A failed retry must not announce that the link was copied')
+  h.app.endSession()
+  h.peer.resolve(h.connection)
+  await starting
+}
 console.info('Session checks passed: CSP registration, pairing actions, permissions, cancellation, stale resources, radio sync, Help focus, asset reload, QR lifecycle, wake locks, receive health, source interruption, diagnostics, protocol and clipboard fallback')

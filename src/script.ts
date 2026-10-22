@@ -311,10 +311,12 @@ function root() {
       const current = generation
       try {
         await navigator.clipboard.writeText(this.pairingLink)
-        if (current != generation) return
+        if (current != generation || this.state != 'waiting') return
         this.copied = true
+        this.error = ''
       } catch (error) {
-        if (current != generation) return
+        if (current != generation || this.state != 'waiting') return
+        this.copied = false
         this.error = 'Copy is unavailable. Select and copy the pairing link below.'
         console.debug('Clipboard unavailable', { reason: error.message })
       }
@@ -470,6 +472,8 @@ function root() {
         }
         this.pairingLink = ''
         this.qrCode = ''
+        this.copied = false
+        this.error = ''
         console.info('Audio connected', { role: mode, transport: 'iroh', sampleRate: context.sampleRate })
         this.holdScreen(current)
         const player = processor!
