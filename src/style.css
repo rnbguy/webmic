@@ -213,7 +213,7 @@ noscript { position: absolute; inset: 1rem; z-index: 2; overflow: auto; backgrou
   .pairing-entry input { padding-inline: .375rem; }
   .pairing-entry .soft-button { padding-inline: .5rem; }
 }
-@container app (max-width: 12rem) {
+@container app (max-width: 16rem) {
   .segmented-control { flex-direction: column; }
   .role-option label { justify-content: flex-start; padding-inline: 1rem; }
   .container[data-state="error"] .feedback-note { display: none; }

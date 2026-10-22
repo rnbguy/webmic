@@ -99,21 +99,26 @@ export async function checkRecovery(browser: Browser, url: string) {
     await page.goto(url)
     await page.getByRole('button', { name: 'Start speaker', exact: true }).waitFor()
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
-    const roles = await page.locator('.role-option label').evaluateAll(labels => labels.map(label => {
-      const text = Array.from(label.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())
-      if (!text) throw new Error('Role label has no text')
-      const range = new Range()
-      range.selectNodeContents(text)
-      const lines = Array.from(range.getClientRects()).filter(line => line.width > 0)
-      const bounds = label.getBoundingClientRect()
-      return {
-        readable: lines.length === 1 && lines[0].left >= bounds.left && lines[0].right <= bounds.right,
-        iconLeft: label.querySelector('.icon')!.getBoundingClientRect().left,
-        textLeft: range.getBoundingClientRect().left
-      }
-    }))
-    assert.ok(roles.every(role => role.readable), 'Enlarged role names must remain complete readable words')
-    assert.ok(Math.abs(roles[0].iconLeft - roles[1].iconLeft) < 1 && Math.abs(roles[0].textLeft - roles[1].textLeft) < 1, 'Stacked roles must share icon and text columns')
+    for (const family of ['', 'monospace']) {
+      await page.evaluate(family => { document.documentElement.style.fontFamily = family }, family)
+      await page.getByRole('radio', { name: 'Speaker', exact: true }).click({ trial: true })
+      const roles = await page.locator('.role-option label').evaluateAll(labels => labels.map(label => {
+        const text = Array.from(label.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())
+        if (!text) throw new Error('Role label has no text')
+        const range = new Range()
+        range.selectNodeContents(text)
+        const lines = Array.from(range.getClientRects()).filter(line => line.width > 0)
+        const bounds = label.getBoundingClientRect()
+        return {
+          readable: lines.length === 1 && lines[0].left >= bounds.left && lines[0].right <= bounds.right,
+          iconLeft: label.querySelector('.icon')!.getBoundingClientRect().left,
+          textLeft: range.getBoundingClientRect().left
+        }
+      }))
+      assert.ok(roles.every(role => role.readable), `${family || 'System'}: enlarged role names must remain complete readable words: ${JSON.stringify(roles)}`)
+      assert.ok(Math.abs(roles[0].iconLeft - roles[1].iconLeft) < 1 && Math.abs(roles[0].textLeft - roles[1].textLeft) < 1, 'Stacked roles must share icon and text columns')
+    }
+    await page.evaluate(() => { document.documentElement.style.fontFamily = '' })
     await page.getByRole('button', { name: 'Start speaker', exact: true }).click()
     const error = page.locator('#session-error')
     await page.getByRole('alert').waitFor()
