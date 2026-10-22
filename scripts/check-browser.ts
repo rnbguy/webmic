@@ -36,7 +36,7 @@ export async function checkBrowser(browser: Browser, url: string) {
       contentType: 'text/javascript',
       body: 'try { new Function("return 1")(); window.cspEvalBlocked = false } catch (error) { window.cspEvalBlocked = error instanceof EvalError }'
     }))
-    await page.addScriptTag({ url: evalProbe })
+    await page.evaluate(async url => { await import(url) }, evalProbe)
     assert.equal(await page.evaluate(() => (window as any).cspEvalBlocked), true, 'Trusted scripts still cannot use unsafe JavaScript evaluation')
     assert.equal(await page.getByRole('link', { name: /Source code/ }).getAttribute('href'), 'https://github.com/rnbguy/webmic')
     assert.equal(await page.locator('a[href*="twitter.com"], a[href*="producthunt.com"]').count(), 0)
