@@ -71,9 +71,11 @@ the existing bounded queue; they do not calibrate real device clocks.
 | Muted | Microphone | Unmute and separate End session | Same connection, no microphone voice |
 | Error | Both | Retry, pair, or Reload app | Actionable failure and asset recovery |
 
-Help, appearance, and QR expansion are independent of streaming. QR expansion
-uses the existing workspace, not a modal or overlay; header/session actions stay
-visible. It collapses on connection or stop. Pairing validation and clipboard errors can
+Help and system appearance changes do not stop streaming. While waiting for a
+microphone, QR expansion uses the existing workspace, not a modal or overlay;
+header/session actions stay visible. The expanded view reserves space for the
+code, keeping its heading available to screen readers. It collapses on connection
+or stop. Pairing validation and clipboard errors can
 appear without entering the fatal Error state. Cancelling setup invalidates late
 callbacks; old operations cannot release a newer session's resources. Enlarged
 text reflows into a bounded scroll island instead of narrow clipped columns.

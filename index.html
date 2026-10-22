@@ -123,7 +123,7 @@
               <p x-show="state === 'connecting'">Keep both devices online and the speaker page open. If needed, cancel and pair again.</p>
             </section>
             <section id="pairing-qr" class="pairing-qr" x-show="mode === 'speaker' && state === 'waiting'" x-cloak aria-labelledby="qr-heading">
-              <h2 id="qr-heading">Scan to connect</h2>
+              <h2 id="qr-heading" :class="{ 'sr-only': pairingExpanded }">Scan to connect</h2>
               <img x-show="qrCode" :src="qrCode || null" alt="Private pairing QR code for this speaker" width="256" height="256">
             </section>
           </div>
