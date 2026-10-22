@@ -1,7 +1,7 @@
-import { cp, mkdir, rm } from 'node:fs/promises'
-import { createHash } from 'node:crypto'
+import { cp, rm } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { generateImages } from './generate-images'
+import { hashAssets, publishAssets } from './asset-graphs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 
@@ -13,10 +13,12 @@ function run(command: string[], cwd = root) {
 run(['cargo', 'build', '--release', '--locked', '--target', 'wasm32-unknown-unknown'], `${root}transport`)
 await rm(`${root}dist`, { recursive: true, force: true })
 run(['wasm-bindgen', '--target', 'web', '--out-name', 'webmic_transport', '--out-dir', `${root}dist/iroh`, `${root}transport/target/wasm32-unknown-unknown/release/webmic_transport.wasm`])
+const transport = await hashAssets(`${root}dist/iroh`)
 
 for (const [entrypoint, naming] of [['src/script.ts', 'bundle.[ext]'], ['src/audio-worklet.ts', 'audio-worklet.[ext]']]) {
   const result = await Bun.build({
-    entrypoints: [`${root}${entrypoint}`], outdir: `${root}dist`, target: 'browser', format: 'esm', naming, minify: true
+    entrypoints: [`${root}${entrypoint}`], outdir: `${root}dist`, target: 'browser', format: 'esm', naming, minify: true,
+    define: { __TRANSPORT_PATH__: JSON.stringify(`../../transport/${transport}/webmic_transport.js`) }
   })
   if (!result.success) throw new AggregateError(result.logs, `Could not compile ${entrypoint}`)
 }
@@ -34,16 +36,9 @@ for (const match of html.matchAll(/<!-- icon:([a-z0-9-]+) -->/g)) {
   const library = match[1] == 'github' ? 'simple-icons' : 'lucide-static'
   html = html.replaceAll(match[0], await Bun.file(`${root}node_modules/${library}/icons/${match[1]}.svg`).text())
 }
-const hash = createHash('sha256').update(html)
-const files = await Array.fromAsync(new Bun.Glob('**/*').scan(`${root}dist`))
-for (const path of files.sort()) {
-  hash.update(path).update(await Bun.file(`${root}dist/${path}`).bytes())
-}
-const version = hash.digest('hex').slice(0, 16)
-
-await rm(`${root}_site`, { recursive: true, force: true })
-await mkdir(`${root}_site`, { recursive: true })
-await cp(`${root}dist`, `${root}_site/dist/${version}`, { recursive: true })
-await Bun.write(`${root}_site/index.html`, html.replaceAll('dist/', `dist/${version}/`))
-await Bun.write(`${root}_site/.nojekyll`, '')
-console.info(`Static site built in _site/ (assets ${version})`)
+const version = await hashAssets(`${root}dist`, html + transport, true)
+await publishAssets({
+  dist: `${root}dist`, output: `${root}_site`, previous: process.env.WEBMIC_PREVIOUS_SITE || `${root}_site`,
+  html, version, transport
+})
+console.info(`Static site built in _site/ (UI ${version}, transport ${transport}; current + two prior releases)`)

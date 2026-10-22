@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import { runInNewContext } from 'node:vm'
 import { SAMPLE_RATE, PACKET_SAMPLES, PACKET_BYTES, HEADER_BYTES } from '../src/audio-format'
+import type { PlaybackStats } from '../src/audio-format'
 
 type Packet = { packet: ArrayBuffer, time: number }
+type Message = Packet | { error: string } | { stats: PlaybackStats }
 class Port {
-  messages: (Packet | { error: string })[] = []
+  messages: Message[] = []
   onmessage: ((event: { data: unknown }) => void) | null = null
-  postMessage(message: Packet | { error: string }, transfer: ArrayBuffer[] = []) {
+  postMessage(message: Message, transfer: ArrayBuffer[] = []) {
     this.messages.push(structuredClone(message, { transfer }))
   }
 }
@@ -136,4 +138,106 @@ for (const data of [null, {}, new Uint8Array(PACKET_BYTES), new ArrayBuffer(0), 
 }
 enqueue(invalid, 0, 32767)
 assert.ok(render(invalid).every(sample => sample == 32767 / 32768), 'Malformed packets do not poison playback state')
-console.info('Audio self-check passed: PCM, transferred buffers, quantum boundaries, stereo, sequence wrap, 20 ms startup, 60 ms queue, loss, late packets, underruns, invalid packets')
+
+function lastStats(player: Processor): PlaybackStats {
+  const message = player.port.messages.at(-1)
+  assert.ok(message && 'stats' in message, 'Playback reports use the shared stats payload')
+  return message.stats
+}
+
+const diagnostics = speaker()
+assert.ok(render(diagnostics, SAMPLE_RATE / 4 - 1).every(sample => sample == 0))
+assert.equal(diagnostics.port.messages.length, 0, 'No stats before 250 ms of rendered samples')
+render(diagnostics, 1)
+assert.deepEqual(lastStats(diagnostics), { gaps: 0, late: 0, underruns: 0, queuedMs: 0, level: 0 }, 'Waiting for the first packet is not an underrun')
+enqueue(diagnostics, 0xfffffffe, -32768)
+enqueue(diagnostics, 0, 8192)
+enqueue(diagnostics, 0xffffffff, 16384)
+enqueue(diagnostics, 0, 16384)
+assert.ok(render(diagnostics).every(sample => sample == -1))
+assert.ok(render(diagnostics).every(sample => sample == 0), 'A reordered packet arriving after concealment does not replace the gap')
+const diagnosticTail = render(diagnostics, PACKET_SAMPLES + 128)
+assert.ok(diagnosticTail.subarray(0, PACKET_SAMPLES).every(sample => sample == 0.25))
+render(diagnostics, SAMPLE_RATE / 4 - PACKET_SAMPLES * 3 - 128)
+const firstStats = lastStats(diagnostics)
+assert.deepEqual(firstStats, { gaps: 1, late: 2, underruns: 2, queuedMs: 0, level: 1 }, 'Wrap, reordering, duplicates, partial underruns and played peak are measured at the consumer')
+render(diagnostics, SAMPLE_RATE / 4)
+assert.deepEqual(lastStats(diagnostics), { gaps: 1, late: 2, underruns: 3, queuedMs: 0, level: 0 }, 'Counters persist while the playback peak resets between reports')
+assert.equal(firstStats.underruns, 2, 'Posted stats snapshots do not change when the reusable worklet payload changes')
+
+const queuedDiagnostics = speaker()
+render(queuedDiagnostics, SAMPLE_RATE / 4 - 128)
+for (let i = 0; i < 20; i++) enqueue(queuedDiagnostics, i, (i + 1) * 1000)
+assert.ok(render(queuedDiagnostics, 128).every(sample => sample == 18000 / 32768))
+assert.deepEqual(lastStats(queuedDiagnostics), {
+  gaps: 0, late: 0, underruns: 0,
+  queuedMs: (PACKET_SAMPLES * 3 - 128) * 1000 / SAMPLE_RATE,
+  level: 18000 / 32768
+}, 'Queue diagnostics reflect remaining bounded audio, not accepted packets or a network-loss count')
+
+// Ten virtual minutes expose queue shedding/starvation from a 100 ppm clock mismatch.
+for (const ppm of [-100, 100]) {
+  const drifting = speaker()
+  const output = new Float32Array(128)
+  const outputs = [[output]]
+  const inputs: Float32Array[][] = []
+  let sent = 0
+  let lastPlayed = -1
+  let lastSample = 0
+  let playedSamples = 0
+  let silentSamples = 0
+  let shortRenders = 0
+  let reported = 0
+  let lastReportFrame = 0
+  const duration = SAMPLE_RATE * 60 * 10
+  for (let frame = 0; frame < duration; frame += output.length) {
+    while (sent * PACKET_SAMPLES * 1_000_000 <= frame * (1_000_000 + ppm)) {
+      enqueue(drifting, sent, sent + 1)
+      sent++
+    }
+    output.fill(0)
+    drifting.process(inputs, outputs)
+    let short = false
+    for (const sample of output) {
+      if (sample == 0) {
+        silentSamples++
+        short = true
+      } else {
+        playedSamples++
+        if (sample != lastSample) {
+          const sequence = sample * 32768 - 1
+          assert.ok(sequence > lastPlayed, 'Clock drift must not replay older audio')
+          lastPlayed = sequence
+          lastSample = sample
+        }
+      }
+    }
+    if (short) shortRenders++
+    if (drifting.port.messages.length > reported) {
+      const elapsed = frame + output.length - lastReportFrame
+      assert.ok(elapsed >= SAMPLE_RATE / 4 && elapsed < SAMPLE_RATE / 4 + output.length, 'Stats stay at or below 4 Hz without catch-up bursts')
+      lastReportFrame = frame + output.length
+      reported = drifting.port.messages.length
+      const stats = lastStats(drifting)
+      assert.equal(stats.gaps, 0, 'Ordered clock drift is not sequence loss')
+      assert.equal(stats.late, 0, 'Ordered clock drift is not packet reordering')
+      assert.equal(stats.underruns, shortRenders, 'Underrun diagnostics match actual silent short renders')
+      assert.ok(stats.queuedMs >= 0 && stats.queuedMs <= 60, 'A long-running clock mismatch cannot grow the queue beyond 60 ms')
+      assert.ok(stats.level > 0 && stats.level <= 1)
+    }
+  }
+  assert.ok(sent > 29000 && reported > 2300, 'Exercise thousands of real packet, ring-buffer and reporting boundaries')
+  assert.ok(sent - 1 - lastPlayed <= 3, 'Playback remains within the bounded queue of current source audio')
+  if (ppm < 0) {
+    assert.ok(silentSamples >= PACKET_SAMPLES * 2 && shortRenders > 0, 'A slower source eventually starves without adaptive resampling')
+  } else {
+    // Dropping 20 ms can straddle packet boundaries; count samples after draining.
+    for (let frame = 0; frame < PACKET_SAMPLES * 3; frame += output.length) {
+      output.fill(0)
+      drifting.process(inputs, outputs)
+      for (const sample of output) if (sample != 0) playedSamples++
+    }
+    assert.ok(playedSamples < sent * PACKET_SAMPLES, 'A faster source sheds old queued audio rather than accumulating latency')
+  }
+}
+console.info('Audio self-check passed: PCM, transferred buffers, quantum boundaries, stereo, sequence wrap, 20 ms startup, 60 ms queue, loss, late packets, underruns, invalid packets, throttled diagnostics, reordering, ten-minute clock drift')

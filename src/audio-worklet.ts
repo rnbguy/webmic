@@ -1,4 +1,5 @@
 import { SAMPLE_RATE, PACKET_SAMPLES, HEADER_BYTES, PACKET_BYTES } from './audio-format'
+import type { PlaybackStats } from './audio-format'
 
 declare const sampleRate: number
 declare const currentTime: number
@@ -46,6 +47,10 @@ class SpeakerProcessor extends AudioWorkletProcessor {
   read: number
   length: number
   expected: number | null
+  stats: PlaybackStats
+  statsMessage: { stats: PlaybackStats }
+  rendered: number
+  peak: number
 
   constructor() {
     super()
@@ -53,6 +58,10 @@ class SpeakerProcessor extends AudioWorkletProcessor {
     this.read = 0
     this.length = 0
     this.expected = null
+    this.stats = { gaps: 0, late: 0, underruns: 0, queuedMs: 0, level: 0 }
+    this.statsMessage = { stats: this.stats }
+    this.rendered = 0
+    this.peak = 0
     this.port.onmessage = ({ data }) => this.enqueue(data)
   }
 
@@ -64,7 +73,11 @@ class SpeakerProcessor extends AudioWorkletProcessor {
     const view = new DataView(packet)
     const sequence = view.getUint32(0, true)
     const gap = this.expected === null ? 0 : (sequence - this.expected) | 0
-    if (gap < 0) return
+    if (gap < 0) {
+      this.stats.late++
+      return
+    }
+    this.stats.gaps += gap
     if (gap > 2) {
       this.read = 0
       this.length = 0
@@ -91,11 +104,23 @@ class SpeakerProcessor extends AudioWorkletProcessor {
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const output = outputs[0][0]
-    for (let i = 0; i < output.length; i++) {
-      if (!this.length) break
-      output[i] = this.samples[this.read]
+    let i = 0
+    for (; i < output.length && this.length; i++) {
+      const sample = this.samples[this.read]
+      output[i] = sample
+      this.peak = Math.max(this.peak, Math.abs(sample))
       this.read = (this.read + 1) % this.samples.length
       this.length--
+    }
+    // Count short render quanta, not missing samples or pre-connection silence.
+    if (i < output.length && this.expected !== null) this.stats.underruns++
+    this.rendered += output.length
+    if (this.rendered >= SAMPLE_RATE / 4) {
+      this.stats.queuedMs = this.length * 1000 / SAMPLE_RATE
+      this.stats.level = this.peak
+      this.port.postMessage(this.statsMessage)
+      this.rendered = 0
+      this.peak = 0
     }
     return true
   }

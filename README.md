@@ -2,8 +2,8 @@
 
 Send a browser microphone to another browser over encrypted iroh connections.
 Pair a microphone and speaker with a private QR code or link. The static frontend
-uses Alpine.js. Its viewport-sized interface uses borderless, rounded panels
-with subtle shadows; only panel contents scroll.
+uses Alpine.js's CSP-compatible build. Its viewport-sized interface uses
+borderless, rounded panels with subtle shadows; only panel contents scroll.
 
 [Open WebMic](https://ranadeep.in/webmic/)
 ([GitHub Pages address](https://rnbguy.github.io/webmic/)). The account's existing
@@ -16,39 +16,68 @@ Opening a speaker's pairing link selects Microphone on either device.
 
 1. On the computer connected to your speaker, select **Speaker** and press
    **Start speaker**. Start with a low output volume.
-2. Scan its QR code with the microphone phone's camera and open the link. Or copy
-   the private pairing link and paste it into WebMic on the microphone device.
-3. Press **Start microphone** and allow microphone access. Audio starts
-   after the status changes to **Streaming to** / **Listening from**.
-4. Press **Stop** on either device to end the session. Restarting the speaker
-   creates a new pairing link; scan or paste that new link before reconnecting.
+2. Scan its QR code with the microphone phone's camera and open the link. Use the
+   expand button beside the private link for a complete QR view on short screens.
+   Or press **Pair with speaker** on the microphone and paste the private link.
+3. Press **Start microphone** and allow microphone access. The microphone shows
+   **Microphone live**; the speaker shows **Receiving audio** once frames arrive.
+4. The microphone's primary action is **Mute microphone** / **Unmute microphone**.
+   Use its separate **End session** control or **Stop speaker** to disconnect.
+   Restarting the speaker creates a new link; pair again before reconnecting.
 
 Use **Mute microphone** to silence microphone audio without closing the connection. Adjust
 **Speaker volume** before increasing your device's output volume. Help does not
 interrupt audio. The interface follows the system's light or dark appearance,
 with light as the fallback when no preference is available.
+On small screens and touch-first devices, buttons, role choices, and pairing
+fields are at least 56 CSS pixels high; session actions are at least 64 CSS
+pixels high. Icons are larger too, without changing desktop pointer layouts.
+
+Keyboard controls use native Tab/Shift+Tab, Enter/Space, radio/volume arrow keys,
+and system copy/paste. Escape dismisses Help, collapses the expanded QR, or
+otherwise cancels pending setup; it does not end a live session.
+Pairing-code preparation shows an animated icon and text; reduced-motion
+preferences keep the icon and text without animation.
 
 Keep both pages open. The devices need internet access, not the same network.
 Bluetooth input routing depends on the phone and browser; pairing a Bluetooth
 microphone with the OS does not guarantee the browser will capture it.
 
+The speaker distinguishes an open connection, arriving frames, and interrupted
+audio. Its received-level meter can show silent frames without implying a remote
+mute. A one-second receive gap changes the health indicator, not the connection;
+this is initial UI tuning, not a measured latency target. Browser online status
+is advisory. Temporary microphone-source mute/unmute is separate from your mute
+button. A wake lock is requested while pairing and streaming where supported.
+
+Help includes low-rate diagnostics: skipped sequence numbers, late/duplicate
+packets, render underruns, queued audio, and capture-backlog drops. These do not
+measure physical end-to-end latency. Ten-minute virtual drift checks exercise
+the existing bounded queue; they do not calibrate real device clocks.
+
 ### Interface state contract
 
 | Session state | Roles | Persistent action | Context |
 | --- | --- | --- | --- |
-| Idle | Both | Start | Pairing setup |
+| Idle, unpaired | Microphone | Pair with speaker | Focus the existing pairing input |
+| Idle, paired | Microphone | Start microphone | Speaker link ready |
+| Idle | Speaker | Start speaker | Pairing setup |
 | Requesting | Microphone | Cancel | Browser permission prompt |
 | Preparing | Both | Cancel | Audio and relay initialization |
 | Connecting | Microphone | Cancel | Peer authentication |
-| Waiting | Speaker | Stop | Private QR/link sharing |
-| Connected | Both | Stop | Live level or output volume; microphone can mute |
-| Muted | Microphone | Stop and Unmute | Same connection, no microphone audio |
-| Error | Both | Retry | Actionable failure message |
+| Waiting | Speaker | Stop speaker | Private QR/link sharing; expanded QR available |
+| Connected | Microphone | Mute and separate End session | Source availability and input level |
+| Connected | Speaker | Stop speaker | Receive health, incoming level, output volume |
+| Muted | Microphone | Unmute and separate End session | Same connection, no microphone voice |
+| Error | Both | Retry, pair, or Reload app | Actionable failure and asset recovery |
 
-Help and appearance are independent of the session. Pairing validation and
-clipboard errors can appear without entering the fatal Error state. Cancelling
-setup invalidates late callbacks; opening Help or changing appearance must not
-stop audio. This is the UI contract, not a formally model-checked specification.
+Help, appearance, and QR expansion are independent of streaming. QR expansion
+uses the existing workspace, not a modal or overlay; header/session actions stay
+visible. It collapses on connection or stop. Pairing validation and clipboard errors can
+appear without entering the fatal Error state. Cancelling setup invalidates late
+callbacks; old operations cannot release a newer session's resources. Enlarged
+text reflows into a bounded scroll island instead of narrow clipped columns.
+This is the UI contract, not a formally model-checked specification.
 
 ## Privacy and limits
 
@@ -71,7 +100,13 @@ stop audio. This is the UI contract, not a formally model-checked specification.
   60 ms of queued samples, dropping older audio when packets arrive in bursts.
   Lower buffering can produce more dropouts on jittery connections.
 - There is no recording, application server, STUN/TURN service, or WebRTC fallback.
-  The UI uses system fonts; executable code and SVG icons are bundled locally.
+  Application code and SVG icons are bundled locally; system fonts are used.
+  The hosting layer has been observed injecting Cloudflare Insights. The app's
+  meta CSP blocks cross-origin executable scripts and unsafe JavaScript
+  evaluation, while permitting its own Wasm/worklet and encrypted relay traffic.
+  Hosting-side injection is not controlled by this repository; disabling the
+  tag itself still requires the provider's configuration. No claim is made that
+  audio or pairing secrets were sent to analytics.
 - Noise suppression is requested from the browser, but this is **not automatic
   acoustic feedback suppression**. Keep the microphone close to the mouth and
   away from speakers. Bluetooth and network delay remain audible risks.
@@ -99,13 +134,22 @@ device require serving over HTTPS; a phone cannot reach this loopback preview.
 
 `bun run build` compiles Rust/Wasm and TypeScript, embeds selected packaged SVG
 icons, generates matching preview/install images, and assembles `_site/`.
-The complete asset set uses one content-hashed URL directory; worklet and Wasm
-loads resolve relative to that same release. This follows standard
+Transport glue and Wasm share an independent content-hashed directory. UI-only
+edits reuse its URL. Each UI release references its matching worklet, images,
+manifest, and transport graph. Publishing retains the current plus two distinct
+prior UI releases and the transports they use. Older tabs outside that window
+may need the explicit **Reload app** recovery action and a fresh pairing link.
+Versions predating that action need a browser reload instead.
+This follows standard
 [cache busting](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching).
-An already-cached pre-versioning page may still need one hard reload.
-`bun run check` checks TypeScript and runs assert-based audio and session checks:
-PCM/transfer boundaries, loss, sequence wrap, queue limits, malformed packets,
-cancelled permission grants, role changes, offline errors, and stale callbacks.
+GitHub Pages controls HTTP cache headers; this repo cannot impose custom
+`Cache-Control` with an unsupported `_headers` file. Long-lived immutable CDN
+caching remains a separate hosting setting, not a claim of this build.
+`bun run check` checks TypeScript and runs assert-based asset, deployment, audio,
+and session checks: safe archive extraction and graph retention, rollback/rerun
+archive selection, PCM/transfer boundaries, loss, sequence wrap, queue limits,
+diagnostics/drift, malformed packets, and deterministic cancellation/replacement
+sequences with stale permission, source, clipboard, timer, and wake-lock results.
 
 ```sh
 bun run check:browser
@@ -114,13 +158,14 @@ bun run check:browser
 The browser check starts and stops its own preview and runs sequentially in
 Chromium, Firefox, and WebKit, locally and in CI. It verifies both system
 themes at 320, 390, 768, and 1280 px, touch targets, text contrast, pairing-link
-validation, help focus restoration, permission denial, and offline retry.
-It also checks desktop/phone defaults, pairing precedence, preview/icon images,
-manifest launch paths, and an upgrade with the previous deployment's assets
-still cached in the browser.
-Layout checks also cover keyboard role selection and focus contrast, short and
-landscape viewports, always-visible session actions, enlarged text, live
-system-theme changes, and the light fallback.
+validation, Help focus restoration, permission denial, and advisory network
+status. It also checks desktop/phone defaults, radio restoration, pairing
+precedence, preview/icons, manifest identity, old-tab deferred worklet/Wasm
+loading across deployment, and unchanged transport URLs for UI-only changes.
+Layout checks cover keyboard role selection and focus contrast, short/landscape
+inline QR expansion, enlarged Speaker errors, persistent actions, edge taps, system
+appearance, and the light fallback. CSP checks verify a usable app while
+blocking third-party scripts and unsafe JavaScript evaluation.
 Set `WEBMIC_TEST_URL` to check an already running preview or deployed site.
 Chromium uses full-browser headless mode, not the reduced headless shell, so
 microphone permission behavior is exercised with working capture APIs.
@@ -138,14 +183,25 @@ dependencies, build outputs, and installed tools, including `wasm-bindgen`.
 Bun package downloads are cached separately by Bun version and lockfile.
 Browser binaries are installed fresh, following
 [Playwright's caching guidance](https://playwright.dev/docs/ci#caching-browsers).
+The workflow restores the last successfully deployed main Pages artifact, using
+environment deployment history rather than workflow creation order. It identifies
+the completed build behind that deployment, including rollback and deploy-only
+reruns. New archive names include the build attempt; the existing first-attempt
+Pages archive is imported during cutover. Paths and file types are validated
+before extraction; new retained graphs have a 90-day artifact lifetime. If the
+deployed archive has expired or been deleted, deployment fails rather than
+silently evicting assets used by open tabs; restore it before retrying.
 
 ## Verification
 
-A Chromium smoke run used a synthetic microphone and actual public iroh relay
-connections, with WebRTC disabled. It rejected an incorrect pairing secret,
-delivered non-silent audio, verified that mute produces silence, preserved the
-session while help was open, re-paired without reloading, and stopped on network
-loss. Light/dark desktop and mobile screenshots were inspected.
+A local Chromium/CloakBrowser smoke used synthetic capture and actual public iroh
+relays with WebRTC disabled. It verified retained published-page startup, failed
+asset reload, non-silent audio, mute/unmute, output gain, and QR collapse on
+connection. Dropped frames changed receive health and recovered without
+disconnecting; a false offline hint left working audio open. The screenshot
+review covers desktop/mobile light/dark, short/landscape QR, errors, and enlarged
+text. Earlier runs also rejected an incorrect pairing secret, kept Help
+non-disruptive, and re-paired without reloading.
 
 A desktop WebKit run reproduced the 30-second relay timeout and rejected the
 dotted relay hostname's TLS certificate. With the upstream workaround, Firefox

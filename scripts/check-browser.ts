@@ -3,6 +3,8 @@ import { chromium, firefox, webkit, type Browser } from 'playwright'
 import { checkUpgrade } from './check-upgrade'
 import { checkDeviceDefaults } from './check-device'
 import { checkLayout } from './check-layout'
+import { checkMobile } from './check-mobile'
+import { checkRecovery } from './check-recovery'
 
 export async function checkBrowser(browser: Browser, url: string) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce' })
@@ -13,6 +15,29 @@ export async function checkBrowser(browser: Browser, url: string) {
     await page.goto(url)
     await page.locator('#session-toggle').waitFor()
     await page.waitForFunction(() => document.querySelector('main')?.hasAttribute('x-data') && !!document.querySelector('#session-toggle')?.getAttribute('aria-label'))
+    let externalScriptRequested = false
+    await page.route('https://csp-probe.invalid/**', async route => {
+      externalScriptRequested = true
+      await route.fulfill({ contentType: 'text/javascript', body: 'document.documentElement.dataset.cspProbe = \"executed\"' })
+    })
+    const scriptLoaded = await page.evaluate(() => {
+      const { promise, resolve } = Promise.withResolvers<boolean>()
+      const script = document.createElement('script')
+      script.src = 'https://csp-probe.invalid/blocked.js'
+      script.onload = () => { script.remove(); resolve(true) }
+      script.onerror = () => { script.remove(); resolve(false) }
+      document.head.append(script)
+      return promise
+    })
+    assert.equal(scriptLoaded, false, 'Meta CSP must block third-party script execution')
+    assert.equal(externalScriptRequested, false, 'Blocked scripts must not reach the network')
+    const evalProbe = new URL('csp-eval-probe.js', url).href
+    await page.route(evalProbe, route => route.fulfill({
+      contentType: 'text/javascript',
+      body: 'try { new Function("return 1")(); window.cspEvalBlocked = false } catch (error) { window.cspEvalBlocked = error instanceof EvalError }'
+    }))
+    await page.addScriptTag({ url: evalProbe })
+    assert.equal(await page.evaluate(() => (window as any).cspEvalBlocked), true, 'Trusted scripts still cannot use unsafe JavaScript evaluation')
     assert.equal(await page.getByRole('link', { name: /Source code/ }).getAttribute('href'), 'https://github.com/rnbguy/webmic')
     assert.equal(await page.locator('a[href*="twitter.com"], a[href*="producthunt.com"]').count(), 0)
     const artwork = await page.evaluate(async () => {
@@ -36,18 +61,36 @@ export async function checkBrowser(browser: Browser, url: string) {
     assert.equal(artwork.start, new URL(url).pathname, 'Installed app must open the application, not its versioned asset directory')
     assert.equal(artwork.scope, new URL(url).pathname)
     await page.getByLabel('Microphone', { exact: true }).check()
+    await page.reload()
+    await page.waitForFunction(() => !!document.querySelector('#session-toggle')?.getAttribute('aria-label'))
+    const restoredRole = await page.locator('main').getAttribute('data-mode')
+    assert.equal(await page.locator(`#${restoredRole}`).isChecked(), true, 'Reload must repair native restored radio properties to match the controller')
+    await page.getByLabel('Microphone', { exact: true }).check()
+    assert.equal(await page.locator('#session-toggle').getAttribute('aria-label'), 'Pair with speaker')
+    await page.locator('#session-toggle').press('Enter')
+    await page.waitForFunction(() => document.activeElement?.id === 'invitation')
+    await page.locator('#help-toggle').press('Space')
+    await page.locator('#help-panel').waitFor()
+    await page.getByRole('button', { name: 'Pair with speaker', exact: true }).click()
+    await page.locator('#help-panel').waitFor({ state: 'hidden' })
+    await page.waitForFunction(() => document.activeElement?.id === 'invitation')
     await page.locator('#invitation').fill('https://untrusted.example/#speaker=e30&key=bad')
     await page.getByRole('button', { name: 'Pair', exact: true }).click()
     await page.getByRole('alert').waitFor()
     assert.match(await page.locator('#session-error').innerText(), /Invalid pairing/)
     assert.equal(await page.locator('#invitation').getAttribute('aria-invalid'), 'true')
     await page.getByLabel('Speaker', { exact: true }).check()
-    assert.equal(await page.getByRole('alert').isVisible(), false, 'Changing role clears an obsolete pairing error')
+    await page.getByRole('alert').waitFor({ state: 'hidden' })
     await page.locator('#help-toggle').click()
     await page.locator('#help-panel').waitFor()
     assert.equal(await page.locator('#help-toggle').getAttribute('aria-expanded'), 'true')
+    await page.waitForFunction(() => document.activeElement?.id === 'help-panel')
     await page.keyboard.press('Escape')
-    assert.equal(await page.locator('#help-panel').isVisible(), false)
+    await page.locator('#help-panel').waitFor({ state: 'hidden' })
+    assert.equal(await page.locator('#help-toggle').evaluate(element => document.activeElement === element), true)
+    await page.keyboard.press('Tab')
+    assert.equal(await page.locator('.source-link').evaluate(element => document.activeElement === element), true)
+    await page.keyboard.press('Shift+Tab')
     assert.equal(await page.locator('#help-toggle').evaluate(element => document.activeElement === element), true)
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' })
@@ -83,7 +126,7 @@ export async function checkBrowser(browser: Browser, url: string) {
           })
           return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722
         }
-        const selectors = ['.status-detail', '.field-note', '.feedback-note', '.role-hint', '.soft-button', '.session-toggle', '.role-option input:checked + label', '.error-panel h2', '#session-error']
+        const selectors = ['.status-detail', '.field-note', '.feedback-note', '.role-hint', '.soft-button', '.session-toggle', '.role-option input:checked + label', '.error-panel > .icon', '#session-error']
         return selectors.map(selector => {
           const element = document.querySelector<HTMLElement>(selector)!
           let ancestor: HTMLElement | null = element
@@ -101,17 +144,23 @@ export async function checkBrowser(browser: Browser, url: string) {
     await page.locator('#invitation').fill(`${url}#speaker=${address}&key=${'a'.repeat(64)}`)
     await page.getByRole('button', { name: 'Pair', exact: true }).click()
     assert.equal(await page.locator('#invitation').inputValue(), '')
+    assert.equal(await page.getByLabel('Microphone', { exact: true }).isChecked(), true)
+    assert.equal(await page.getByLabel('Speaker', { exact: true }).isChecked(), false)
     // Firefox has no Playwright microphone permission mapping; its launch preference denies capture.
     if (browser.browserType().name() !== 'firefox') await context.grantPermissions([], { origin: new URL(url).origin })
     await page.locator('#session-toggle').click()
     await page.waitForFunction(() => document.querySelector('#session-toggle')?.getAttribute('aria-label') === 'Retry microphone')
     assert.match(await page.locator('#session-error').innerText(), /Microphone access was denied/)
     await context.setOffline(true)
+    await page.locator('#network-warning').waitFor()
+    assert.match(await page.locator('#network-warning').innerText(), /reports offline/)
     await page.locator('#session-toggle').click()
-    assert.match(await page.locator('#session-error').innerText(), /offline/)
+    await page.waitForFunction(() => document.querySelector('#session-toggle')?.getAttribute('aria-label') === 'Retry microphone')
+    assert.match(await page.locator('#session-error').innerText(), /Microphone access was denied/, 'Offline hints must not replace real capture failures')
     await context.setOffline(false)
-    assert.deepEqual(errors, [], 'No browser runtime errors')
-    console.info('Browser checks passed: system themes, 320/390/768/1280px layout, touch targets, text contrast, pairing validation, help focus, permission denial, offline retry')
+    await page.locator('#network-warning').waitFor({ state: 'hidden' })
+    assert.deepEqual(errors, [], 'No browser runtime errors under the CSP build')
+    console.info('Browser checks passed: CSP bootstrap/enforcement, system themes, 320/390/768/1280px layout, touch targets, text contrast, pairing actions/validation, Help focus, permission denial and advisory offline retry')
   } catch (error) {
     const page = context.pages()[0]
     console.error('Browser check failed', {
@@ -150,6 +199,8 @@ if (import.meta.main) {
         await checkBrowser(browser, url)
         await checkDeviceDefaults(browser, url)
         await checkLayout(browser, url)
+        await checkMobile(browser, url)
+        await checkRecovery(browser, url)
         // Cache behavior is engine-specific; each fixture builds both deployments using the native build cache.
         if (!process.env.WEBMIC_TEST_URL) await checkUpgrade(browser)
       } finally {

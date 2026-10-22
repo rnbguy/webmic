@@ -66,6 +66,12 @@ export async function checkLayout(browser: Browser, url: string) {
         assert.ok(focus.contrast >= 3, `${scheme} ${role}: focus contrast ${focus.contrast.toFixed(2)}`)
       }
     }
+    await page.locator('#volume').waitFor({ state: 'visible' })
+    await page.locator('#volume').focus()
+    for (const [key, value] of [['Home', '0%'], ['ArrowRight', '1%'], ['End', '100%'], ['ArrowLeft', '99%']]) {
+      await page.keyboard.press(key)
+      await page.waitForFunction(value => document.querySelector('output[for="volume"]')?.textContent === value, value)
+    }
     for (const [width, height] of [[320, 568], [390, 844], [844, 390], [768, 600], [1280, 720], [390, 360]]) {
       await page.setViewportSize({ width, height })
       for (const role of ['Speaker', 'Microphone']) {

@@ -17,6 +17,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      artifact-name: github-pages-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
     env:
       WASM_BINDGEN_VERSION: 0.2.129
     steps:
@@ -49,15 +55,75 @@ jobs:
         run: cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
       - name: Install Chromium, Firefox, and WebKit for UI checks
         run: bunx playwright install --with-deps --no-shell chromium firefox webkit
+      - name: Find the last successfully deployed main artifact
+        id: previous
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const repository = context.repo;
+            // Environment deployments follow rollbacks and reruns; run creation order does not.
+            const deployments = await github.paginate(github.rest.repos.listDeployments, {
+              ...repository, environment: 'github-pages', ref: 'main', per_page: 100
+            });
+            let deployedJob;
+            for (const deployment of deployments) {
+              const statuses = await github.paginate(github.rest.repos.listDeploymentStatuses, {
+                ...repository, deployment_id: deployment.id, per_page: 100
+              });
+              const success = statuses.find(status => status.state === 'success');
+              if (!success) continue;
+              const prefix = `${process.env.GITHUB_SERVER_URL}/${repository.owner}/${repository.repo}/actions/runs/`;
+              const match = success.log_url?.startsWith(prefix) && success.log_url.slice(prefix.length).match(/^(\d+)\/job\/(\d+)\/?$/);
+              if (!match) throw new Error('The previous Pages deployment has no recognized workflow job URL; refusing to discard its assets.');
+              ({ data: deployedJob } = await github.rest.actions.getJobForWorkflowRun({
+                ...repository, job_id: Number(match[2])
+              }));
+              break;
+            }
+            if (!deployedJob) {
+              core.info('No previous successful main deployment; starting the first release graph.');
+              return;
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...repository, run_id: deployedJob.run_id, filter: 'all', per_page: 100
+            });
+            const build = jobs.filter(job => job.name === 'build' && job.conclusion === 'success' && job.completed_at <= deployedJob.started_at)
+              .sort((a, b) => Date.parse(b.completed_at) - Date.parse(a.completed_at))[0];
+            if (!build) throw new Error('The deployed Pages build attempt could not be identified.');
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              ...repository, run_id: deployedJob.run_id, per_page: 100
+            });
+            const artifact = artifacts.find(artifact => artifact.name === `github-pages-${build.run_attempt}`)
+              ?? (build.run_attempt === 1 ? artifacts.find(artifact => artifact.name === 'github-pages') : undefined);
+            if (!artifact || artifact.expired) {
+              throw new Error(`Pages artifact for deployed run ${deployedJob.run_id}, build attempt ${build.run_attempt}, is missing or expired. Restore that published artifact before deploying; refusing to drop assets needed by open tabs.`);
+            }
+            core.setOutput('run-id', String(deployedJob.run_id));
+            core.setOutput('artifact-id', String(artifact.id));
+      - name: Download the previous deployed Pages artifact
+        if: steps.previous.outputs.run-id != ''
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          artifact-ids: ${{ steps.previous.outputs.artifact-id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.previous.outputs.run-id }}
+          path: ${{ runner.temp }}/previous-pages-artifact
+      - name: Validate and extract previous release graphs
+        if: steps.previous.outputs.run-id != ''
+        run: bun scripts/extract-pages.ts "$RUNNER_TEMP/previous-pages-artifact/artifact.tar" "$RUNNER_TEMP/previous-site"
       - name: Compile static site
         run: bun run build
+        env:
+          WEBMIC_PREVIOUS_SITE: ${{ runner.temp }}/previous-site
       - name: Check TypeScript, audio, and session lifecycle
         run: bun run check
       - name: Check production UI, devices, layout, recovery, and upgrades in all three engines
         run: bun run check:browser
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: _site
+          retention-days: 90
   deploy:
     if: github.event_name != 'pull_request'
     needs: build
@@ -72,3 +138,5 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact-name }}
