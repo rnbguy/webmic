@@ -184,8 +184,17 @@ repository. The default branch, development, and Pages deployment use `main`.
 CI uses `setup-bun`'s built-in executable cache and `rust-cache` for Cargo
 dependencies, build outputs, and installed tools, including `wasm-bindgen`.
 Bun package downloads are cached separately by Bun version and lockfile.
-Browser binaries are installed fresh, following
-[Playwright's caching guidance](https://playwright.dev/docs/ci#caching-browsers).
+Site artwork generation and the core/browser suite use the version-matched
+official [Playwright Ubuntu image](https://playwright.dev/docs/docker).
+Browsers and OS libraries are preinstalled, with no per-run APT installation.
+Official `actions/cache` restore/save actions cache this one image archive by
+OS, architecture, and immutable image ID. Hits load it without registry access.
+Misses pull the pinned registry digest; main-branch runs save the cache even if
+checks fail.
+The host stays on Ubuntu 24.04 to match the container ABI; cached Bun/Rust tools
+and the retained site are mounted for builds and upgrade checks. Update the image
+reference and ID with the Playwright package.
+
 The workflow restores the last successfully deployed main Pages artifact, using
 environment deployment history rather than workflow creation order. It identifies
 the completed build behind that deployment, including rollback and deploy-only
